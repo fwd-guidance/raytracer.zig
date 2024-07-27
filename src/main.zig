@@ -1,24 +1,31 @@
 const std = @import("std");
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    const stdout = std.io.getStdOut().writer();
+    // Image
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const image_width: i64 = 256;
+    const image_height: i64 = 256;
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    // Render
 
-    try bw.flush(); // don't forget to flush!
-}
+    try stdout.print("P3\n{d} {d} \n255\n", .{ image_width, image_height });
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+    for (0..image_height) |j| {
+        std.debug.print("\rScanlines remaining: {d}\n", .{image_height - @as(i64, @intCast(j))});
+        for (0..image_width) |i| {
+            const r = @as(f64, @floatFromInt(i)) / (image_width - 1);
+            const g = @as(f64, @floatFromInt(j)) / (image_height - 1);
+            const b = 0.0;
+
+            const ir: i32 = @as(i32, @intFromFloat(255.999 * r));
+            const ig: i32 = @as(i32, @intFromFloat(255.999 * g));
+            const ib: i32 = @as(i32, @intFromFloat(255.999 * b));
+
+            //const stdout = std.io.getStdOut().writer();
+            try stdout.print("{d} {d} {d}\n", .{ ir, ig, ib });
+        }
+    }
+
+    std.debug.print("\rDone.              \n", .{});
 }
