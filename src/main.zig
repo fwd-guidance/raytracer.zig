@@ -5,7 +5,20 @@ const ray = @import("ray.zig");
 
 const std = @import("std");
 
+pub fn hit_sphere(center: @Vector(3, f64), radius: f64, r: ray.Ray) !bool {
+    const oc: @Vector(3, f64) = center - r.origin;
+    const a: f64 = try vec.dot(r.direction, r.direction);
+    const b: f64 = -2.0 * try vec.dot(r.direction, oc);
+    const c: f64 = try vec.dot(oc, oc) - radius * radius;
+    const discriminant: f64 = b * b - 4 * a * c;
+    return (discriminant >= 0);
+}
+
 pub fn ray_color(r: ray.Ray) !@Vector(3, f64) {
+    if (try hit_sphere(init(0, 0, -1), 0.5, r)) {
+        return init(1, 0, 0);
+    }
+
     const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);
     const a: f64 = 0.5 * (unit_direction[1] + 1.0);
     return try vec.scale(init(1.0, 1.0, 1.0), 1.0 - a) + try vec.scale(init(0.5, 0.7, 1.0), a);
