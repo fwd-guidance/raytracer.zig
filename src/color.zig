@@ -1,7 +1,7 @@
 const vec = @import("vec.zig");
 const std = @import("std");
 
-pub const color = vec.vec;
+pub const color: @Vector(3, f64) = undefined;
 
 pub fn write_color(pixel_color: @Vector(3, f64)) !void {
     const stdout = std.io.getStdOut().writer();
