@@ -5,18 +5,24 @@ const ray = @import("ray.zig");
 
 const std = @import("std");
 
-pub fn hit_sphere(center: @Vector(3, f64), radius: f64, r: ray.Ray) !bool {
+pub fn hit_sphere(center: @Vector(3, f64), radius: f64, r: ray.Ray) !f64 {
     const oc: @Vector(3, f64) = center - r.origin;
-    const a: f64 = try vec.dot(r.direction, r.direction);
-    const b: f64 = -2.0 * try vec.dot(r.direction, oc);
-    const c: f64 = try vec.dot(oc, oc) - radius * radius;
-    const discriminant: f64 = b * b - 4 * a * c;
-    return (discriminant >= 0);
+    const a: f64 = try vec.square_magnitude(r.direction);
+    const h: f64 = try vec.dot(r.direction, oc);
+    const c: f64 = try vec.square_magnitude(oc) - radius * radius;
+    const discriminant: f64 = h * h - a * c;
+    if (discriminant < 0) {
+        return -1.0;
+    } else {
+        return (h - @sqrt(discriminant)) / a;
+    }
 }
 
 pub fn ray_color(r: ray.Ray) !@Vector(3, f64) {
-    if (try hit_sphere(init(0, 0, -1), 0.5, r)) {
-        return init(1, 0, 0);
+    const t: f64 = try hit_sphere(init(0, 0, -1), 0.5, r);
+    if (t > 0.0) {
+        const N: @Vector(3, f64) = try vec.unit(try r.position(t) - init(0, 0, -1));
+        return try vec.scale(init(N[0] + 1, N[1] + 1, N[2] + 1), 0.5);
     }
 
     const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);

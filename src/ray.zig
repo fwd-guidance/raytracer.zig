@@ -9,6 +9,6 @@ pub const Ray = struct {
     }
 
     pub fn position(self: Ray, t: f64) !@Vector(3, f64) {
-        return self.origin + vec.scale(self.direction, t);
+        return self.origin + try vec.scale(self.direction, t);
     }
 };
