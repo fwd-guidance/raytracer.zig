@@ -6,3 +6,8 @@ pub const vec = @import("vec.zig");
 pub const hittable = @import("hittable.zig");
 pub const sphere = @import("sphere.zig");
 pub const HittableList = @import("hittable_list.zig");
+
+pub inline fn random_double() f64 {
+    const rand = std.crypto.random;
+    return rand.float(f64);
+}
