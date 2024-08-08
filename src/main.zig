@@ -3,30 +3,55 @@ const init = @import("vec.zig").init;
 const color = @import("color.zig");
 const ray = @import("ray.zig");
 
+const sphere = @import("sphere.zig");
+const Sphere = sphere.sphere;
+
 const std = @import("std");
+const hittable = @import("hittable.zig");
+const hit_record = hittable.hit_record;
+const hittableList = @import("hittable_list.zig");
+const hittable_list = hittableList.HittableList;
 
 pub fn hit_sphere(center: @Vector(3, f64), radius: f64, r: ray.Ray) !f64 {
     const oc: @Vector(3, f64) = center - r.origin;
     const a: f64 = try vec.square_magnitude(r.direction);
     const h: f64 = try vec.dot(r.direction, oc);
     const c: f64 = try vec.square_magnitude(oc) - radius * radius;
+    //std.debug.print("OLD oc = {},       a = {},        h = {},      c = {}\n", .{ oc, a, h, c });
     const discriminant: f64 = h * h - a * c;
+    //std.debug.print("OLD DISCRIMINANT = {}\n", .{discriminant});
     if (discriminant < 0) {
         return -1.0;
     } else {
-        return (h - @sqrt(discriminant)) / a;
+        //std.debug.print("OLD ROOT = {}", .{(h - std.math.sqrt(discriminant)) / a});
+        return (h - std.math.sqrt(discriminant)) / a;
     }
 }
 
-pub fn ray_color(r: ray.Ray) !@Vector(3, f64) {
+pub fn og_ray_color(r: ray.Ray) !@Vector(3, f64) {
     const t: f64 = try hit_sphere(init(0, 0, -1), 0.5, r);
     if (t > 0.0) {
+        //std.debug.print("OLD\n", .{});
         const N: @Vector(3, f64) = try vec.unit(try r.position(t) - init(0, 0, -1));
+        //std.debug.print("OLD = {any}\n", .{N});
         return try vec.scale(init(N[0] + 1, N[1] + 1, N[2] + 1), 0.5);
     }
 
     const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);
     const a: f64 = 0.5 * (unit_direction[1] + 1.0);
+    return try vec.scale(init(1.0, 1.0, 1.0), 1.0 - a) + try vec.scale(init(0.5, 0.7, 1.0), a);
+}
+
+pub fn ray_color(r: ray.Ray, world: *hittable_list) !@Vector(3, f64) {
+    const rec: hit_record = undefined;
+    const result = (world.hit(r, 0, std.math.inf(f64), @constCast(&rec)));
+    if (result.ok) {
+        //std.debug.print("NEW N = {}\n", .{try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5)});
+        return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);
+    }
+
+    const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);
+    const a: f64 = 0.5 * unit_direction[1] + 1.0;
     return try vec.scale(init(1.0, 1.0, 1.0), 1.0 - a) + try vec.scale(init(0.5, 0.7, 1.0), a);
 }
 
@@ -39,6 +64,18 @@ pub fn draw_ppm() !void {
 
     // Caclulate the image height and ensure that it's at least one
     const image_height: f64 = if ((image_width / aspect_ratio) > 1) image_width / aspect_ratio else 1;
+
+    //allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // world
+    var world = hittable_list.init(allocator);
+    defer world.deinit();
+    _ = try world.add(Sphere{ .center = init(0, 0, -1), .radius = 0.5 });
+    _ = try world.add(Sphere{ .center = init(0, -100.5, -1), .radius = 100 });
 
     // Camera
     const focal_length: f64 = 1.0;
@@ -63,7 +100,7 @@ pub fn draw_ppm() !void {
     try stdout.print("P3\n{d} {d} \n255\n", .{ image_width, image_height });
 
     for (0..image_height) |j| {
-        std.debug.print("\rScanlines remaining: {d}\n", .{image_height - @as(f64, @floatFromInt(j))});
+        //std.debug.print("\rScanlines remaining: {d}\n", .{image_height - @as(f64, @floatFromInt(j))});
         for (0..image_width) |i| {
             const f64_i: f64 = @as(f64, @floatFromInt(i));
             const f64_j: f64 = @as(f64, @floatFromInt(j));
@@ -72,14 +109,20 @@ pub fn draw_ppm() !void {
             const ray_direction: @Vector(3, f64) = pixel_center - camera_center;
             const r: ray.Ray = ray.Ray{ .origin = camera_center, .direction = ray_direction };
 
-            const pixel_color: @Vector(3, f64) = try ray_color(r);
-            try color.write_color(pixel_color);
-            //const stdout = std.io.getStdOut().writer();
-            //try stdout.print("{d} {d} {d}\n", .{ ir, ig, ib });
+            const new_pixel_color: @Vector(3, f64) = try ray_color(r, @constCast(&world)); //@constCast(&world);
+            //_ = new_pixel_color + init(1, 1, 1);
+            //std.debug.print("NEW PIXEL COLOR = {}\n", .{new_pixel_color});
+            try color.write_color(new_pixel_color);
+
+            //const old_pixel_color: @Vector(3, f64) = try og_ray_color(r);
+            //_ = old_pixel_color + init(1, 1, 1);
+            //std.debug.print("OLD PIXEL COLOR = {}\n", .{old_pixel_color});
+            //try color.write_color(old_pixel_color);
         }
     }
 
     std.debug.print("\rDone.              \n", .{});
+    //std.debug.print("World: {any}\n", .{world.objects.items});
 }
 
 pub fn main() !void {
