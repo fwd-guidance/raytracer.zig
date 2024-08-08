@@ -4,3 +4,5 @@ zig-out/
 zig-cache/
 src/root.zig 
 renders/
+TODO.md
+*.ppm

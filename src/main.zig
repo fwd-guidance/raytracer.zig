@@ -11,6 +11,8 @@ const hittable = @import("hittable.zig");
 const hit_record = hittable.hit_record;
 const hittableList = @import("hittable_list.zig");
 const hittable_list = hittableList.HittableList;
+const interval = @import("interval.zig");
+const Interval = interval.Interval;
 
 pub fn hit_sphere(center: @Vector(3, f64), radius: f64, r: ray.Ray) !f64 {
     const oc: @Vector(3, f64) = center - r.origin;
@@ -44,7 +46,7 @@ pub fn og_ray_color(r: ray.Ray) !@Vector(3, f64) {
 
 pub fn ray_color(r: ray.Ray, world: *hittable_list) !@Vector(3, f64) {
     const rec: hit_record = undefined;
-    const result = (world.hit(r, 0, std.math.inf(f64), @constCast(&rec)));
+    const result = (world.hit(r, Interval{ .min = 0, .max = std.math.inf(f64) }, @constCast(&rec)));
     if (result.ok) {
         //std.debug.print("NEW N = {}\n", .{try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5)});
         return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);

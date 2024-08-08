@@ -1,5 +1,6 @@
 const rtw = @import("rtweekend.zig");
-
+const interval = @import("interval.zig");
+const Interval = interval.Interval;
 const std = rtw.std;
 const math = std.math;
 const vec = rtw.vec;
@@ -33,13 +34,13 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: Self, r: ray.Ray, ray_tmin: f64, ray_tmax: f64, rec: *hittable.hit_record) Result {
+    pub fn hit(self: Self, r: ray.Ray, ray_t: Interval, rec: *hittable.hit_record) Result {
         const temp_rec: hittable.hit_record = undefined;
         var hit_anything: bool = false;
-        var closest_so_far = ray_tmax;
+        var closest_so_far = ray_t.max;
 
         for (self.objects.items) |object| {
-            if (object.hit(@constCast(&r), ray_tmin, closest_so_far, @constCast(&temp_rec))) {
+            if (object.hit(@constCast(&r), Interval{ .min = ray_t.min, .max = closest_so_far }, @constCast(&temp_rec))) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
                 //std.debug.print("temp_rec.t = {}\n", .{temp_rec.t});
