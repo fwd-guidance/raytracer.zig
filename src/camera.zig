@@ -35,7 +35,7 @@ pub const Camera = struct {
 
         while (j < self.*.image_height) : (j += 1) {
             var i: f64 = 0;
-            //std.debug.print("\rScanlines remaining: {d}\n", .{image_height - @as(f64, @floatFromInt(j))});
+            std.debug.print("\rScanlines remaining: {d}\n", .{self.*.image_height - j});
             while (i < self.*.image_width) : (i += 1) {
                 var pixel_color = init(0, 0, 0);
                 var sample: f32 = 0;
@@ -113,7 +113,7 @@ pub const Camera = struct {
         }
 
         const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);
-        const a: f64 = 0.5 * unit_direction[1] + 1.0;
+        const a: f64 = 0.5 * (unit_direction[1] + 1.0);
         return try vec.scale(init(1.0, 1.0, 1.0), 1.0 - a) + try vec.scale(init(0.5, 0.7, 1.0), a);
     }
 };
