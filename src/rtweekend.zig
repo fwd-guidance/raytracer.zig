@@ -27,3 +27,7 @@ pub inline fn random_double() f64 {
     const rand = std.crypto.random;
     return rand.float(f64);
 }
+
+pub inline fn random_double_range(min: f64, max: f64) f64 {
+    return min + (max - min) * random_double();
+}

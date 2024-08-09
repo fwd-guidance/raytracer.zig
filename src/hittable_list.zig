@@ -10,7 +10,8 @@ const ArrayList = std.ArrayList;
 
 pub const Result = struct {
     ok: bool,
-    result: @Vector(3, f64),
+    normal: @Vector(3, f64),
+    p: @Vector(3, f64),
 };
 
 pub const HittableList = struct {
@@ -43,6 +44,6 @@ pub const HittableList = struct {
                 //rec.* = temp_rec;
             }
         }
-        return Result{ .ok = hit_anything, .result = rec.*.normal };
+        return Result{ .ok = hit_anything, .normal = rec.*.normal, .p = rec.*.p };
     }
 };

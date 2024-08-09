@@ -1,8 +1,18 @@
 const rtw = @import("rtweekend.zig");
+const random_double = rtw.random_double;
+const random_double_range = rtw.random_double_range;
 const std = rtw.std;
 
 pub fn init(x: f64, y: f64, z: f64) @Vector(3, f64) {
     return @Vector(3, f64){ x, y, z };
+}
+
+pub fn random_vec() @Vector(3, f64) {
+    return @Vector(3, f64){ random_double(), random_double(), random_double() };
+}
+
+pub fn random_vec_range(min: f64, max: f64) @Vector(3, f64) {
+    return @Vector(3, f64){ random_double_range(min, max), random_double_range(min, max), random_double_range(min, max) };
 }
 
 pub fn add(v: @Vector(3, f64), scalar: f64) !@Vector(3, f64) {
@@ -27,6 +37,26 @@ pub fn square_magnitude(v: @Vector(3, f64)) !f64 {
 
 pub fn unit(v: @Vector(3, f64)) !@Vector(3, f64) {
     return v / init(try magnitude(v), try magnitude(v), try magnitude(v));
+}
+
+pub fn random_in_unit_sphere() !@Vector(3, f64) {
+    while (true) {
+        const p = random_vec_range(-1, 1);
+        if (try square_magnitude(p) < 1) return p;
+    }
+}
+
+pub fn random_unit_vector() @Vector(3, f64) {
+    return try unit(try random_in_unit_sphere());
+}
+
+pub fn random_on_hemisphere(normal: @Vector(3, f64)) !@Vector(3, f64) {
+    const on_unit_sphere = random_unit_vector();
+    if (try dot(on_unit_sphere, normal) > 0.0) {
+        return on_unit_sphere;
+    } else {
+        return try invert(on_unit_sphere);
+    }
 }
 
 pub fn dot(u: @Vector(3, f64), v: @Vector(3, f64)) !f64 {

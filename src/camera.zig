@@ -13,6 +13,7 @@ const random_double = rtw.random_double;
 
 pub const Camera = struct {
     samples_per_pixel: f32,
+    max_depth: f32,
     aspect_ratio: f64,
     image_width: f64,
     image_height: f64,
@@ -38,7 +39,7 @@ pub const Camera = struct {
                 var sample: f32 = 0;
                 while (sample < self.*.samples_per_pixel) : (sample += 1) {
                     const r: Ray = get_ray(self, i, j);
-                    pixel_color += try ray_color(r, world);
+                    pixel_color += try ray_color(r, self.*.max_depth, world);
                 }
                 try color.write_color(try vec.scale(pixel_color, self.*.pixel_samples_scale));
             }
@@ -85,11 +86,15 @@ pub const Camera = struct {
         return vec.init(random_double() - 0.5, random_double() - 0.5, 0);
     }
 
-    fn ray_color(r: Ray, world: *const hittable_list) !@Vector(3, f64) {
+    fn ray_color(r: Ray, depth: f64, world: *const hittable_list) !@Vector(3, f64) {
+        if (depth <= 0) return init(0, 0, 0);
+
         const rec: hit_record = undefined;
-        const result = (world.hit(r, Interval{ .min = 0, .max = std.math.inf(f64) }, @constCast(&rec)));
+        const result = (world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f64) }, @constCast(&rec)));
         if (result.ok) {
-            return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);
+            const direction: @Vector(3, f64) = result.normal + try vec.random_on_hemisphere(result.normal);
+            return try vec.scale(try ray_color(Ray{ .origin = result.p, .direction = direction }, depth - 1, world), 0.5);
+            //return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);
         }
 
         const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);
