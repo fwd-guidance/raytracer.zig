@@ -1,4 +1,6 @@
-const vec = @import("vec.zig");
+const rtw = @import("rtweekend.zig");
+
+const vec = rtw.vec;
 
 pub const Ray = struct {
     origin: @Vector(3, f64),

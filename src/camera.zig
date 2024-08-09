@@ -1,17 +1,14 @@
-const hittablelist = @import("hittable_list.zig");
-const hittable_list = hittablelist.HittableList;
-const ray = @import("ray.zig");
-const Ray = ray.Ray;
-const hittable = @import("hittable.zig");
-const hit_record = hittable.hit_record;
-const std = @import("std");
-const stdout = std.io.getStdOut().writer();
-const vec = @import("vec.zig");
-const init = vec.init;
-const color = @import("color.zig");
-const interval = @import("interval.zig");
-const Interval = interval.Interval;
 const rtw = @import("rtweekend.zig");
+
+const hittable_list = rtw.HittableList.HittableList;
+const Ray = rtw.ray.Ray;
+const hit_record = rtw.hittable.hit_record;
+const std = rtw.std;
+const stdout = rtw.std.io.getStdOut().writer();
+const vec = rtw.vec;
+const init = rtw.vec.init;
+const color = rtw.color;
+const Interval = rtw.interval.Interval;
 const random_double = rtw.random_double;
 
 pub const Camera = struct {
@@ -40,7 +37,7 @@ pub const Camera = struct {
                 var pixel_color = init(0, 0, 0);
                 var sample: f32 = 0;
                 while (sample < self.*.samples_per_pixel) : (sample += 1) {
-                    const r: ray.Ray = get_ray(self, i, j);
+                    const r: Ray = get_ray(self, i, j);
                     pixel_color += try ray_color(r, world);
                 }
                 try color.write_color(try vec.scale(pixel_color, self.*.pixel_samples_scale));
@@ -73,7 +70,7 @@ pub const Camera = struct {
         self.*.pixel00_loc = viewport_upper_left + init(0.5, 0.5, 0.5) * (self.*.pixel_delta_u + self.*.pixel_delta_v);
     }
 
-    fn get_ray(self: *Self, i: f64, j: f64) ray.Ray {
+    fn get_ray(self: *Self, i: f64, j: f64) Ray {
         // Construct a camera ray originating from the origin and directed at rnadomly sampled
         // point around the pixel location i, j
         const offset: @Vector(3, f64) = sample_square();
@@ -81,7 +78,7 @@ pub const Camera = struct {
         const ray_origin: @Vector(3, f64) = self.*.center;
         const ray_direction: @Vector(3, f64) = pixel_sample - ray_origin;
 
-        return ray.Ray{ .origin = ray_origin, .direction = ray_direction };
+        return Ray{ .origin = ray_origin, .direction = ray_direction };
     }
 
     fn sample_square() @Vector(3, f64) {

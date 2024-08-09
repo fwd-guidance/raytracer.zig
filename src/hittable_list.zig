@@ -1,12 +1,9 @@
 const rtw = @import("rtweekend.zig");
-const interval = @import("interval.zig");
-const Interval = interval.Interval;
+
+const Interval = rtw.interval.Interval;
 const std = rtw.std;
-const math = std.math;
-const vec = rtw.vec;
-const ray = rtw.ray;
-const hittable = rtw.hittable;
-const sphere = rtw.sphere;
+const Ray = rtw.ray.Ray;
+const hit_record = rtw.hittable.hit_record;
 const Sphere = rtw.sphere.sphere;
 
 const ArrayList = std.ArrayList;
@@ -34,8 +31,8 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: Self, r: ray.Ray, ray_t: Interval, rec: *hittable.hit_record) Result {
-        const temp_rec: hittable.hit_record = undefined;
+    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *hit_record) Result {
+        const temp_rec: hit_record = undefined;
         var hit_anything: bool = false;
         var closest_so_far = ray_t.max;
 

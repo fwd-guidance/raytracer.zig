@@ -1,7 +1,7 @@
-const vec = @import("vec.zig");
-const std = @import("std");
-const interval = @import("interval.zig");
-const Interval = interval.Interval;
+const rtw = @import("rtweekend.zig");
+
+const std = rtw.std;
+const Interval = rtw.interval.Interval;
 
 pub const color: @Vector(3, f64) = undefined;
 

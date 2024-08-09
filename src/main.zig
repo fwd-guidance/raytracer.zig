@@ -1,20 +1,10 @@
-const vec = @import("vec.zig");
-const init = @import("vec.zig").init;
-const color = @import("color.zig");
-const ray = @import("ray.zig");
+const rtw = @import("rtweekend.zig");
 
-const sphere = @import("sphere.zig");
-const Sphere = sphere.sphere;
-
-const std = @import("std");
-const hittable = @import("hittable.zig");
-const hit_record = hittable.hit_record;
-const hittableList = @import("hittable_list.zig");
-const hittable_list = hittableList.HittableList;
-const interval = @import("interval.zig");
-const Interval = interval.Interval;
-const camera = @import("camera.zig");
-const Camera = camera.Camera;
+const init = rtw.vec.init;
+const Sphere = rtw.sphere.sphere;
+const std = rtw.std;
+const hittable_list = rtw.HittableList.HittableList;
+const Camera = rtw.camera.Camera;
 
 pub fn draw_ppm() !void {
 

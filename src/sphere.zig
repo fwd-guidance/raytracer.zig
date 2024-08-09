@@ -1,16 +1,18 @@
-const hittable = @import("hittable.zig");
-const vec = @import("vec.zig");
-const ray = @import("ray.zig");
-const std = @import("std");
-const interval = @import("interval.zig");
-const Interval = interval.Interval;
+const rtw = @import("rtweekend.zig");
+
+const hit_record = rtw.hittable.hit_record;
+const vec = rtw.vec;
+const init = rtw.vec.init;
+const Ray = rtw.ray.Ray;
+const std = rtw.std;
+const Interval = rtw.interval.Interval;
 
 pub const sphere = struct {
     center: @Vector(3, f64),
     radius: f64,
     const Self = @This();
 
-    pub fn hit(self: Self, r: *ray.Ray, ray_t: Interval, rec: *hittable.hit_record) bool {
+    pub fn hit(self: Self, r: *Ray, ray_t: Interval, rec: *hit_record) bool {
         const oc: @Vector(3, f64) = self.center - r.*.origin;
         const a: f64 = try vec.square_magnitude(r.*.direction);
         const h: f64 = try vec.dot(r.*.direction, oc);
@@ -33,7 +35,7 @@ pub const sphere = struct {
         rec.*.t = root;
 
         rec.*.p = try r.position(root);
-        const outward_normal: @Vector(3, f64) = (rec.*.p - self.center) / vec.init(self.radius, self.radius, self.radius);
+        const outward_normal: @Vector(3, f64) = (rec.*.p - self.center) / init(self.radius, self.radius, self.radius);
         rec.set_face_normal(r, @constCast(&outward_normal));
 
         return true;

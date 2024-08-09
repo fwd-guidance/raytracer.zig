@@ -1,6 +1,7 @@
-const ray = @import("ray.zig");
-const vec = @import("vec.zig");
-const std = @import("std");
+const rtw = @import("rtweekend.zig");
+
+const Ray = rtw.ray.Ray;
+const vec = rtw.vec;
 
 pub const hit_record = struct {
     p: @Vector(3, f64),
@@ -9,7 +10,7 @@ pub const hit_record = struct {
     front_face: bool,
     const Self = @This();
 
-    pub fn set_face_normal(self: *Self, r: *ray.Ray, outward_normal: *@Vector(3, f64)) void {
+    pub fn set_face_normal(self: *Self, r: *Ray, outward_normal: *@Vector(3, f64)) void {
         // Sets the hit record normal Vector
         // NOTE: the parameter outward_normal is assumed to have unit length
 
