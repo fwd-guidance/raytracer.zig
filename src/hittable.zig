@@ -15,6 +15,5 @@ pub const hit_record = struct {
 
         self.*.front_face = (try vec.dot(r.direction, outward_normal.*)) < 0;
         self.*.normal = if (self.*.front_face) outward_normal.* else try vec.invert(outward_normal.*);
-        //std.debug.print("self.*.normal = {}\n", .{self.*.normal});
     }
 };

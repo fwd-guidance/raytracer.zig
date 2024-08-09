@@ -43,14 +43,9 @@ pub const HittableList = struct {
             if (object.hit(@constCast(&r), Interval{ .min = ray_t.min, .max = closest_so_far }, @constCast(&temp_rec))) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
-                //std.debug.print("temp_rec.t = {}\n", .{temp_rec.t});
-                //std.debug.print("hit anything = {}\n", .{hit_anything});
-                //std.debug.print("closest_so_far = {}\n", .{closest_so_far});
                 //rec.* = temp_rec;
-                //std.debug.print("hittable_list rec.*.normal = {}\n", .{rec.*.normal});
             }
         }
-        //std.debug.print("HEREHEREHEREHERE: {}\n", .{rec.*.normal});
         return Result{ .ok = hit_anything, .result = rec.*.normal };
     }
 };

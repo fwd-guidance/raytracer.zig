@@ -44,22 +44,6 @@ pub const Camera = struct {
                     pixel_color += try ray_color(r, world);
                 }
                 try color.write_color(try vec.scale(pixel_color, self.*.pixel_samples_scale));
-                //const f64_i: f64 = @as(f64, @floatFromInt(i));
-                //const f64_j: f64 = @as(f64, @floatFromInt(j));
-
-                //const pixel_center: @Vector(3, f64) = self.*.pixel00_loc + (init(i, i, i) * self.*.pixel_delta_u) + (init(j, j, j) * self.*.pixel_delta_v);
-                //const ray_direction: @Vector(3, f64) = pixel_center - self.*.center;
-                //const r: ray.Ray = ray.Ray{ .origin = self.*.center, .direction = ray_direction };
-
-                //const new_pixel_color: @Vector(3, f64) = try ray_color(r, world); //@constCast(&world);
-                //_ = new_pixel_color + init(1, 1, 1);
-                //std.debug.print("NEW PIXEL COLOR = {}\n", .{new_pixel_color});
-                //try color.write_color(new_pixel_color);
-
-                //const old_pixel_color: @Vector(3, f64) = try og_ray_color(r);
-                //_ = old_pixel_color + init(1, 1, 1);
-                //std.debug.print("OLD PIXEL COLOR = {}\n", .{old_pixel_color});
-                //try color.write_color(old_pixel_color);
             }
         }
 
@@ -108,7 +92,6 @@ pub const Camera = struct {
         const rec: hit_record = undefined;
         const result = (world.hit(r, Interval{ .min = 0, .max = std.math.inf(f64) }, @constCast(&rec)));
         if (result.ok) {
-            //std.debug.print("NEW N = {}\n", .{try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5)});
             return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);
         }
 
