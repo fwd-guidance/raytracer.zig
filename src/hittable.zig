@@ -2,10 +2,12 @@ const rtw = @import("rtweekend.zig");
 
 const Ray = rtw.ray.Ray;
 const vec = rtw.vec;
+const Material = rtw.Material;
 
 pub const hit_record = struct {
     p: @Vector(3, f64),
     t: f64,
+    mat: *const Material,
     normal: @Vector(3, f64),
     front_face: bool,
     const Self = @This();

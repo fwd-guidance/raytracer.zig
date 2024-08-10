@@ -23,6 +23,9 @@ pub const Interval = interval.Interval;
 pub const camera = @import("camera.zig");
 pub const Camera = camera.Camera;
 
+pub const material = @import("material.zig");
+pub const Material = material.Material;
+
 pub inline fn random_double() f64 {
     const rand = std.crypto.random;
     return rand.float(f64);

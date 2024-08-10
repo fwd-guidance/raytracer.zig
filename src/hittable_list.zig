@@ -5,13 +5,14 @@ const std = rtw.std;
 const Ray = rtw.ray.Ray;
 const hit_record = rtw.hittable.hit_record;
 const Sphere = rtw.sphere.sphere;
-
+const Material = rtw.material.Material;
 const ArrayList = std.ArrayList;
 
 pub const Result = struct {
     ok: bool,
     normal: @Vector(3, f64),
     p: @Vector(3, f64),
+    mat: *const Material,
 };
 
 pub const HittableList = struct {
@@ -44,6 +45,6 @@ pub const HittableList = struct {
                 //rec.* = temp_rec;
             }
         }
-        return Result{ .ok = hit_anything, .normal = rec.*.normal, .p = rec.*.p };
+        return Result{ .ok = hit_anything, .normal = rec.*.normal, .p = rec.*.p, .mat = rec.mat };
     }
 };

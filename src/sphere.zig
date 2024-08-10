@@ -6,10 +6,12 @@ const init = rtw.vec.init;
 const Ray = rtw.ray.Ray;
 const std = rtw.std;
 const Interval = rtw.interval.Interval;
+const Material = rtw.Material;
 
 pub const sphere = struct {
     center: @Vector(3, f64),
     radius: f64,
+    mat: *const Material,
     const Self = @This();
 
     pub fn hit(self: Self, r: *Ray, ray_t: Interval, rec: *hit_record) bool {
@@ -37,6 +39,7 @@ pub const sphere = struct {
         rec.*.p = try r.position(root);
         const outward_normal: @Vector(3, f64) = (rec.*.p - self.center) / init(self.radius, self.radius, self.radius);
         rec.set_face_normal(r, @constCast(&outward_normal));
+        rec.*.mat = @constCast(self.mat);
 
         return true;
     }

@@ -10,6 +10,8 @@ const init = rtw.vec.init;
 const color = rtw.color;
 const Interval = rtw.interval.Interval;
 const random_double = rtw.random_double;
+const material = rtw.material;
+const Result = material.Result;
 
 pub const Camera = struct {
     samples_per_pixel: f32,
@@ -92,8 +94,20 @@ pub const Camera = struct {
         const rec: hit_record = undefined;
         const result = (world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f64) }, @constCast(&rec)));
         if (result.ok) {
-            const direction: @Vector(3, f64) = result.normal + try vec.random_on_hemisphere(result.normal);
-            return try vec.scale(try ray_color(Ray{ .origin = result.p, .direction = direction }, depth - 1, world), 0.5);
+            const scattered: Ray = undefined;
+            const attenuation: @Vector(3, f64) = undefined;
+            const is_scattered: Result = switch (result.mat.*) {
+                .Lambertian => |l| try l.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
+                .Metal => |m| try m.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
+            };
+            if (is_scattered.ok) {
+                //std.debug.print("--------- ATTENUATION = {} -------------\n", .{attenuation});
+                return is_scattered.attenuation * try ray_color(is_scattered.scattered, depth - 1, world);
+            }
+            //std.debug.print("HERE\n", .{});
+            return @Vector(3, f64){ 0.0, 0.0, 0.0 };
+            //const direction: @Vector(3, f64) = result.normal + try vec.random_on_hemisphere(result.normal);
+            //return try vec.scale(try ray_color(Ray{ .origin = result.p, .direction = direction }, depth - 1, world), 0.6);
             //return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);
         }
 
