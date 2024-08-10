@@ -24,6 +24,13 @@ pub const Camera = struct {
     pixel_delta_u: @Vector(3, f64),
     pixel_delta_v: @Vector(3, f64),
     pixel_samples_scale: f64,
+    vfov: f64,
+    lookfrom: @Vector(3, f64),
+    lookat: @Vector(3, f64),
+    vup: @Vector(3, f64),
+    u: @Vector(3, f64),
+    v: @Vector(3, f64),
+    w: @Vector(3, f64),
     const Self = @This();
 
     pub fn render(self: *Self, world: *const hittable_list) !void {
@@ -53,23 +60,28 @@ pub const Camera = struct {
     fn initialize(self: *Self) void {
         self.*.image_height = if ((self.*.image_width / self.*.aspect_ratio) > 1) self.*.image_width / self.*.aspect_ratio else 1;
         self.*.pixel_samples_scale = @as(f64, 1.0) / self.*.samples_per_pixel;
+        self.*.center = self.*.lookfrom;
 
         // Camera
-        const focal_length: f64 = 1.0;
-        const viewport_height: f64 = 2.0;
+        const focal_length: f64 = try rtw.vec.magnitude(self.lookfrom - self.lookat);
+        const theta = std.math.degreesToRadians(self.vfov);
+        const h = std.math.tan(theta / 2);
+        const viewport_height: f64 = 2 * h * focal_length;
         const viewport_width: f64 = viewport_height * @as(f64, self.*.image_width / self.*.image_height);
-        const camera_center: @Vector(3, f64) = self.*.center;
-
+        //const camera_center: @Vector(3, f64) = self.*.center;
+        self.*.w = try rtw.vec.unit(self.lookfrom - self.lookat);
+        self.*.u = try rtw.vec.unit(try rtw.vec.cross(self.vup, self.w));
+        self.*.v = try rtw.vec.cross(self.w, self.u);
         // Calculate the vectors across the horizontal and down the vertical viewport edges
-        const viewport_u: @Vector(3, f64) = init(viewport_width, 0, 0);
-        const viewport_v: @Vector(3, f64) = init(0, -viewport_height, 0);
+        const viewport_u: @Vector(3, f64) = try vec.scale(self.*.u, viewport_width);
+        const viewport_v: @Vector(3, f64) = try vec.scale(try vec.invert(self.*.v), viewport_height);
 
         // Calculate the hoirzontal and vertical delta vectors pixel to pixel
         self.*.pixel_delta_u = viewport_u / init(self.*.image_width, self.*.image_width, self.*.image_width);
         self.*.pixel_delta_v = viewport_v / init(self.*.image_height, self.*.image_height, self.*.image_height);
 
         // Calculate the location of the upper left pixel
-        const viewport_upper_left: @Vector(3, f64) = camera_center - init(0, 0, focal_length) - (viewport_u * init(0.5, 0.5, 0.5)) - (viewport_v * init(0.5, 0.5, 0.5));
+        const viewport_upper_left: @Vector(3, f64) = self.center - (try vec.scale(self.*.w, focal_length)) - (try vec.scale(viewport_u, 0.5)) - (try vec.scale(viewport_v, 0.5));
         self.*.pixel00_loc = viewport_upper_left + init(0.5, 0.5, 0.5) * (self.*.pixel_delta_u + self.*.pixel_delta_v);
     }
 
