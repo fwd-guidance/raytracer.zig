@@ -31,6 +31,10 @@ pub const Camera = struct {
     u: @Vector(3, f64),
     v: @Vector(3, f64),
     w: @Vector(3, f64),
+    defocus_angle: f64,
+    focus_dist: f64,
+    defocus_disk_u: @Vector(3, f64),
+    defocus_disk_v: @Vector(3, f64),
     const Self = @This();
 
     pub fn render(self: *Self, world: *const hittable_list) !void {
@@ -63,10 +67,10 @@ pub const Camera = struct {
         self.*.center = self.*.lookfrom;
 
         // Camera
-        const focal_length: f64 = try rtw.vec.magnitude(self.lookfrom - self.lookat);
+        //const focal_length: f64 = try rtw.vec.magnitude(self.lookfrom - self.lookat);
         const theta = std.math.degreesToRadians(self.vfov);
         const h = std.math.tan(theta / 2);
-        const viewport_height: f64 = 2 * h * focal_length;
+        const viewport_height: f64 = 2 * h * self.*.focus_dist;
         const viewport_width: f64 = viewport_height * @as(f64, self.*.image_width / self.*.image_height);
         //const camera_center: @Vector(3, f64) = self.*.center;
         self.*.w = try rtw.vec.unit(self.lookfrom - self.lookat);
@@ -81,8 +85,11 @@ pub const Camera = struct {
         self.*.pixel_delta_v = viewport_v / init(self.*.image_height, self.*.image_height, self.*.image_height);
 
         // Calculate the location of the upper left pixel
-        const viewport_upper_left: @Vector(3, f64) = self.center - (try vec.scale(self.*.w, focal_length)) - (try vec.scale(viewport_u, 0.5)) - (try vec.scale(viewport_v, 0.5));
+        const viewport_upper_left: @Vector(3, f64) = self.center - (try vec.scale(self.*.w, self.*.focus_dist)) - (try vec.scale(viewport_u, 0.5)) - (try vec.scale(viewport_v, 0.5));
         self.*.pixel00_loc = viewport_upper_left + init(0.5, 0.5, 0.5) * (self.*.pixel_delta_u + self.*.pixel_delta_v);
+        const defocus_radius: f64 = self.*.focus_dist * std.math.tan(std.math.degreesToRadians(self.*.defocus_angle / 2.0));
+        self.*.defocus_disk_u = try vec.scale(self.*.u, defocus_radius);
+        self.*.defocus_disk_v = try vec.scale(self.*.v, defocus_radius);
     }
 
     fn get_ray(self: *Self, i: f64, j: f64) Ray {
@@ -90,7 +97,7 @@ pub const Camera = struct {
         // point around the pixel location i, j
         const offset: @Vector(3, f64) = sample_square();
         const pixel_sample: @Vector(3, f64) = self.*.pixel00_loc + (init(i + offset[0], i + offset[0], i + offset[0]) * self.*.pixel_delta_u) + (init(j + offset[1], j + offset[1], j + offset[1]) * self.*.pixel_delta_v);
-        const ray_origin: @Vector(3, f64) = self.*.center;
+        const ray_origin: @Vector(3, f64) = if (self.*.defocus_angle <= 0) self.*.center else defocus_disk_sample(self);
         const ray_direction: @Vector(3, f64) = pixel_sample - ray_origin;
 
         return Ray{ .origin = ray_origin, .direction = ray_direction };
@@ -98,6 +105,11 @@ pub const Camera = struct {
 
     fn sample_square() @Vector(3, f64) {
         return vec.init(random_double() - 0.5, random_double() - 0.5, 0);
+    }
+
+    fn defocus_disk_sample(self: *Self) @Vector(3, f64) {
+        const p = try vec.random_in_unit_disk();
+        return self.*.center + (try vec.scale(self.*.defocus_disk_u, p[0])) + (try vec.scale(self.*.defocus_disk_v, p[1]));
     }
 
     fn ray_color(r: Ray, depth: f64, world: *const hittable_list) !@Vector(3, f64) {

@@ -44,6 +44,13 @@ pub fn unit(v: @Vector(3, f64)) !@Vector(3, f64) {
     return v / init(try magnitude(v), try magnitude(v), try magnitude(v));
 }
 
+pub fn random_in_unit_disk() !@Vector(3, f64) {
+    while (true) {
+        const p = @Vector(3, f64){ random_double_range(-1, 1), random_double_range(-1, 1), 0 };
+        if (try square_magnitude(p) < 1) return p;
+    }
+}
+
 pub fn random_in_unit_sphere() !@Vector(3, f64) {
     while (true) {
         const p = random_vec_range(-1, 1);

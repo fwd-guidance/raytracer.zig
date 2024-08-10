@@ -44,6 +44,8 @@ pub fn draw_ppm() !void {
     cam.lookfrom = @Vector(3, f64){ -2, 2, 1 };
     cam.lookat = @Vector(3, f64){ 0, 0, -1 };
     cam.vup = @Vector(3, f64){ 0, 1, 0 };
+    cam.defocus_angle = 10.0;
+    cam.focus_dist = 3.4;
     try cam.render(&world);
 }
 
