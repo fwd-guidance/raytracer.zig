@@ -68,6 +68,13 @@ pub fn reflect(v: *const @Vector(3, f64), n: *const @Vector(3, f64)) !@Vector(3,
     return @constCast(v).* - try scale(@constCast(n).*, try dot(@constCast(v).*, @constCast(n).*) * 2);
 }
 
+pub fn refract(uv: *const @Vector(3, f64), n: @Vector(3, f64), etai_over_etat: f64) !@Vector(3, f64) {
+    const cos_theta: f64 = @min(try dot(try invert(uv.*), n), 1.0);
+    const r_out_perp = try scale(uv.* + try scale(n, cos_theta), etai_over_etat);
+    const r_out_parallel = try scale(n, -@sqrt(@abs(1.0 - try square_magnitude(r_out_perp))));
+    return r_out_perp + r_out_parallel;
+}
+
 pub fn dot(u: @Vector(3, f64), v: @Vector(3, f64)) !f64 {
     return (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]);
 }

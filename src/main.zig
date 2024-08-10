@@ -20,13 +20,17 @@ pub fn draw_ppm() !void {
 
     const material_ground = Material.lambertian(@Vector(3, f64){ 0.8, 0.8, 0.0 });
     const material_center = Material.lambertian(@Vector(3, f64){ 0.1, 0.2, 0.5 });
-    const material_left = Material.metal(@Vector(3, f64){ 0.8, 0.8, 0.8 }, 0.3);
-    const material_right = Material.metal(@Vector(3, f64){ 0.8, 0.6, 0.2 }, 1.0);
+    const material_left = Material.dielectric(1.50);
+    const material_bubble = Material.dielectric(1.00 / 1.50);
+    const material_right = Material.metal(@Vector(3, f64){ 0.8, 0.6, 0.2 }, 0.0);
 
     defer world.deinit();
     //_ = try world.add(Sphere{ .center = init(0.0, -100.5, -1.0), .radius = 100.0, .mat = &material_ground });
     _ = try world.add(Sphere{ .center = init(0.0, 0.0, -1.2), .radius = 0.5, .mat = &material_center });
+
+    //_ = try world.add(Sphere{ .center = init(-1.0, 0.0, -1.0), .radius = 0.4, .mat = &material_bubble });
     _ = try world.add(Sphere{ .center = init(-1.0, 0.0, -1.0), .radius = 0.5, .mat = &material_left });
+    _ = try world.add(Sphere{ .center = init(-1.0, 0.0, -1.0), .radius = 0.25, .mat = &material_bubble });
     _ = try world.add(Sphere{ .center = init(1.0, 0.0, -1.0), .radius = 0.5, .mat = &material_right });
 
     _ = try world.add(Sphere{ .center = init(0.0, -100.5, -1.0), .radius = 100.0, .mat = &material_ground });
@@ -34,8 +38,8 @@ pub fn draw_ppm() !void {
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
     cam.image_width = 400;
-    cam.samples_per_pixel = 250;
-    cam.max_depth = 100;
+    cam.samples_per_pixel = 25;
+    cam.max_depth = 10;
     try cam.render(&world);
 }
 

@@ -99,6 +99,7 @@ pub const Camera = struct {
             const is_scattered: Result = switch (result.mat.*) {
                 .Lambertian => |l| try l.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
                 .Metal => |m| try m.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
+                .Dielectric => |d| try d.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
             };
             if (is_scattered.ok) {
                 //std.debug.print("--------- ATTENUATION = {} -------------\n", .{attenuation});
