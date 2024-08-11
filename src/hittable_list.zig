@@ -33,8 +33,8 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *hit_record) Result {
-        const temp_rec: hit_record = undefined;
+    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *hit_record) bool {
+        var temp_rec: hit_record = undefined;
         var hit_anything: bool = false;
         var closest_so_far = ray_t.max;
 
@@ -42,9 +42,10 @@ pub const HittableList = struct {
             if (object.hit(@constCast(&r), Interval{ .min = ray_t.min, .max = closest_so_far }, @constCast(&temp_rec))) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
-                //rec.* = temp_rec;
+                rec.* = temp_rec;
             }
         }
-        return Result{ .ok = hit_anything, .normal = rec.*.normal, .p = rec.*.p, .mat = rec.mat };
+        return hit_anything;
+        //return Result{ .ok = hit_anything, .normal = rec.*.normal, .p = rec.*.p, .mat = rec.mat };
     }
 };

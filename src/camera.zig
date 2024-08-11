@@ -115,19 +115,20 @@ pub const Camera = struct {
     fn ray_color(r: Ray, depth: f64, world: *const hittable_list) !@Vector(3, f64) {
         if (depth <= 0) return init(0, 0, 0);
 
-        const rec: hit_record = undefined;
-        const result = (world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f64) }, @constCast(&rec)));
-        if (result.ok) {
-            const scattered: Ray = undefined;
-            const attenuation: @Vector(3, f64) = undefined;
-            const is_scattered: Result = switch (result.mat.*) {
+        var rec: hit_record = undefined;
+        //const result =
+        if (world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f64) }, @constCast(&rec))) {
+            //if (result.ok) {
+            var scattered: Ray = undefined;
+            var attenuation: @Vector(3, f64) = undefined;
+            const is_scattered: bool = switch (rec.mat.*) {
                 .Lambertian => |l| try l.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
                 .Metal => |m| try m.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
                 .Dielectric => |d| try d.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
             };
-            if (is_scattered.ok) {
+            if (is_scattered) {
                 //std.debug.print("--------- ATTENUATION = {} -------------\n", .{attenuation});
-                return is_scattered.attenuation * try ray_color(is_scattered.scattered, depth - 1, world);
+                return attenuation * try ray_color(scattered, depth - 1, world);
             }
             //std.debug.print("HERE\n", .{});
             return @Vector(3, f64){ 0.0, 0.0, 0.0 };

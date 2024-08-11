@@ -35,7 +35,7 @@ pub const Lambertian = struct {
     albedo: @Vector(3, f64),
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !Result {
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !bool {
         _ = r_in;
         var scatter_direction: @Vector(3, f64) = rec.*.normal + rtw.vec.random_unit_vector();
 
@@ -44,7 +44,8 @@ pub const Lambertian = struct {
         attenuation.* = self.albedo;
         //rtw.std.debug.print("scattered = {}\n", .{scattered.*});
         //rtw.std.debug.print("attenuation = {}\n", .{attenuation.*});
-        return Result{ .ok = true, .scattered = scattered.*, .attenuation = attenuation.* };
+        //return Result{ .ok = true, .scattered = scattered.*, .attenuation = attenuation.* };
+        return true;
     }
 };
 
@@ -53,13 +54,13 @@ pub const Metal = struct {
     fuzz: f64,
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !Result {
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !bool {
         var reflected = try rtw.vec.reflect(&r_in.direction, &rec.normal);
         reflected = try rtw.vec.unit(reflected) + (try rtw.vec.scale(rtw.vec.random_unit_vector(), self.fuzz));
         scattered.* = Ray{ .origin = rec.*.p, .direction = reflected };
         attenuation.* = self.albedo;
-
-        return Result{ .ok = (try rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0), .scattered = scattered.*, .attenuation = attenuation.* };
+        return try rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0;
+        //return Result{ .ok = (try rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0), .scattered = scattered.*, .attenuation = attenuation.* };
     }
 };
 
@@ -67,7 +68,7 @@ pub const Dielectric = struct {
     refraction_index: f64,
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !Result {
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !bool {
         attenuation.* = @Vector(3, f64){ 1.0, 1.0, 1.0 };
         const ri: f64 = if (rec.*.front_face) 1.0 / self.refraction_index else self.refraction_index;
         const unit_direction = try rtw.vec.unit(r_in.*.direction);
@@ -86,7 +87,8 @@ pub const Dielectric = struct {
         scattered.* = Ray{ .origin = rec.*.p, .direction = direction };
         //rtw.std.debug.print("SCATTERED = {any}\n", .{scattered.*});
         //rtw.std.debug.print("ATTENUATION = {any}\n", .{attenuation.*});
-        return Result{ .ok = true, .scattered = scattered.*, .attenuation = attenuation.* };
+        return true;
+        //return Result{ .ok = true, .scattered = scattered.*, .attenuation = attenuation.* };
     }
 
     fn reflectance(cosine: f64, refraction_index: f64) !f64 {
