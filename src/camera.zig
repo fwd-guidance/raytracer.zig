@@ -121,7 +121,7 @@ pub const Camera = struct {
             //if (result.ok) {
             var scattered: Ray = undefined;
             var attenuation: @Vector(3, f64) = undefined;
-            const is_scattered: bool = switch (rec.mat.*) {
+            const is_scattered: bool = switch (rec.mat) {
                 .Lambertian => |l| try l.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
                 .Metal => |m| try m.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
                 .Dielectric => |d| try d.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),

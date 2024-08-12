@@ -26,11 +26,11 @@ pub const Camera = camera.Camera;
 pub const material = @import("material.zig");
 pub const Material = material.Material;
 
-pub inline fn random_double() f64 {
+pub fn random_double() f64 {
     const rand = std.crypto.random;
     return rand.float(f64);
 }
 
-pub inline fn random_double_range(min: f64, max: f64) f64 {
+pub fn random_double_range(min: f64, max: f64) f64 {
     return min + (max - min) * random_double();
 }

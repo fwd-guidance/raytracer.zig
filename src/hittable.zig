@@ -7,12 +7,12 @@ const Material = rtw.Material;
 pub const hit_record = struct {
     p: @Vector(3, f64),
     t: f64,
-    mat: *const Material,
+    mat: Material,
     normal: @Vector(3, f64),
     front_face: bool,
     const Self = @This();
 
-    pub fn set_face_normal(self: *Self, r: *Ray, outward_normal: *@Vector(3, f64)) void {
+    pub fn set_face_normal(self: *Self, r: *const Ray, outward_normal: *const @Vector(3, f64)) void {
         // Sets the hit record normal Vector
         // NOTE: the parameter outward_normal is assumed to have unit length
 

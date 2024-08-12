@@ -11,10 +11,10 @@ const Material = rtw.Material;
 pub const sphere = struct {
     center: @Vector(3, f64),
     radius: f64,
-    mat: *const Material,
+    mat: Material,
     const Self = @This();
 
-    pub fn hit(self: Self, r: *Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
         const oc: @Vector(3, f64) = self.center - r.*.origin;
         const a: f64 = try vec.square_magnitude(r.*.direction);
         const h: f64 = try vec.dot(r.*.direction, oc);
@@ -38,8 +38,8 @@ pub const sphere = struct {
 
         rec.*.p = try r.position(root);
         const outward_normal: @Vector(3, f64) = (rec.*.p - self.center) / init(self.radius, self.radius, self.radius);
-        rec.set_face_normal(r, @constCast(&outward_normal));
-        rec.*.mat = @constCast(self.mat);
+        rec.set_face_normal(r, &outward_normal);
+        rec.*.mat = self.mat;
 
         return true;
     }

@@ -39,7 +39,7 @@ pub const HittableList = struct {
         var closest_so_far = ray_t.max;
 
         for (self.objects.items) |object| {
-            if (object.hit(@constCast(&r), Interval{ .min = ray_t.min, .max = closest_so_far }, @constCast(&temp_rec))) {
+            if (object.hit(&r, Interval{ .min = ray_t.min, .max = closest_so_far }, @constCast(&temp_rec))) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
                 rec.* = temp_rec;
