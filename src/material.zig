@@ -3,12 +3,6 @@ const rtw = @import("rtweekend.zig");
 const Ray = rtw.Ray;
 const hit_record = rtw.hit_record;
 
-pub const Result = struct {
-    ok: bool,
-    scattered: Ray,
-    attenuation: @Vector(3, f64),
-};
-
 pub const Material = union(enum) {
     Lambertian: Lambertian,
     Metal: Metal,
@@ -26,10 +20,6 @@ pub const Material = union(enum) {
         return Material{ .Dielectric = Dielectric{ .refraction_index = refraction_index } };
     }
 };
-//pub fn scatter(r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !bool {
-//    return false;
-//}
-//};
 
 pub const Lambertian = struct {
     albedo: @Vector(3, f64),
@@ -42,9 +32,6 @@ pub const Lambertian = struct {
         if (try rtw.vec.near_zero(scatter_direction)) scatter_direction = rec.*.normal;
         scattered.* = Ray{ .origin = rec.*.p, .direction = scatter_direction };
         attenuation.* = self.albedo;
-        //rtw.std.debug.print("scattered = {}\n", .{scattered.*});
-        //rtw.std.debug.print("attenuation = {}\n", .{attenuation.*});
-        //return Result{ .ok = true, .scattered = scattered.*, .attenuation = attenuation.* };
         return true;
     }
 };
@@ -60,7 +47,6 @@ pub const Metal = struct {
         scattered.* = Ray{ .origin = rec.*.p, .direction = reflected };
         attenuation.* = self.albedo;
         return try rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0;
-        //return Result{ .ok = (try rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0), .scattered = scattered.*, .attenuation = attenuation.* };
     }
 };
 
@@ -85,10 +71,7 @@ pub const Dielectric = struct {
         }
 
         scattered.* = Ray{ .origin = rec.*.p, .direction = direction };
-        //rtw.std.debug.print("SCATTERED = {any}\n", .{scattered.*});
-        //rtw.std.debug.print("ATTENUATION = {any}\n", .{attenuation.*});
         return true;
-        //return Result{ .ok = true, .scattered = scattered.*, .attenuation = attenuation.* };
     }
 
     fn reflectance(cosine: f64, refraction_index: f64) !f64 {

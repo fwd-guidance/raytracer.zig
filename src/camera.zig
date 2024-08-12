@@ -67,15 +67,14 @@ pub const Camera = struct {
         self.*.center = self.*.lookfrom;
 
         // Camera
-        //const focal_length: f64 = try rtw.vec.magnitude(self.lookfrom - self.lookat);
         const theta = std.math.degreesToRadians(self.vfov);
         const h = std.math.tan(theta / 2);
         const viewport_height: f64 = 2 * h * self.*.focus_dist;
         const viewport_width: f64 = viewport_height * @as(f64, self.*.image_width / self.*.image_height);
-        //const camera_center: @Vector(3, f64) = self.*.center;
         self.*.w = try rtw.vec.unit(self.lookfrom - self.lookat);
         self.*.u = try rtw.vec.unit(try rtw.vec.cross(self.vup, self.w));
         self.*.v = try rtw.vec.cross(self.w, self.u);
+
         // Calculate the vectors across the horizontal and down the vertical viewport edges
         const viewport_u: @Vector(3, f64) = try vec.scale(self.*.u, viewport_width);
         const viewport_v: @Vector(3, f64) = try vec.scale(try vec.invert(self.*.v), viewport_height);
@@ -116,9 +115,7 @@ pub const Camera = struct {
         if (depth <= 0) return init(0, 0, 0);
 
         var rec: hit_record = undefined;
-        //const result =
         if (world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f64) }, @constCast(&rec))) {
-            //if (result.ok) {
             var scattered: Ray = undefined;
             var attenuation: @Vector(3, f64) = undefined;
             const is_scattered: bool = switch (rec.mat) {
@@ -127,14 +124,9 @@ pub const Camera = struct {
                 .Dielectric => |d| try d.scatter(&r, &rec, @constCast(&attenuation), @constCast(&scattered)),
             };
             if (is_scattered) {
-                //std.debug.print("--------- ATTENUATION = {} -------------\n", .{attenuation});
                 return attenuation * try ray_color(scattered, depth - 1, world);
             }
-            //std.debug.print("HERE\n", .{});
             return @Vector(3, f64){ 0.0, 0.0, 0.0 };
-            //const direction: @Vector(3, f64) = result.normal + try vec.random_on_hemisphere(result.normal);
-            //return try vec.scale(try ray_color(Ray{ .origin = result.p, .direction = direction }, depth - 1, world), 0.6);
-            //return try vec.scale(result.result + init(1.0, 1.0, 1.0), 0.5);
         }
 
         const unit_direction: @Vector(3, f64) = try vec.unit(r.direction);

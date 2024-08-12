@@ -25,9 +25,9 @@ pub fn draw_ppm() !void {
     const material2 = Material.lambertian(@Vector(3, f64){ 0.4, 0.2, 0.1 });
     const material3 = Material.metal(@Vector(3, f64){ 0.7, 0.6, 0.5 }, 0.0);
 
-    var a: f64 = 0;
+    var a: f64 = -11;
     while (a < 11) : (a += 1) {
-        var b: f64 = 0;
+        var b: f64 = -11;
         while (b < 11) : (b += 1) {
             const choose_mat = rtw.random_double();
 
@@ -68,11 +68,6 @@ pub fn draw_ppm() !void {
     cam.vup = @Vector(3, f64){ 0, 1, 0 };
     cam.defocus_angle = 0.6;
     cam.focus_dist = 10.0;
-
-    //for (world.objects.items) |item| {
-    //    std.debug.print("{any}\n", .{item.mat});
-    //}
-    //std.debug.print("world = {any}\n", .{world.objects.items});
 
     try cam.render(&world);
 }
