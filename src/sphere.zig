@@ -7,6 +7,7 @@ const Ray = rtw.ray.Ray;
 const std = rtw.std;
 const Interval = rtw.interval.Interval;
 const Material = rtw.Material;
+const aabb = rtw.aabb;
 
 pub const sphere = struct {
     center: @Vector(3, f64),
@@ -14,7 +15,23 @@ pub const sphere = struct {
     mat: Material,
     is_moving: bool,
     center_vec: ?@Vector(3, f64),
+    bbox: aabb,
     const Self = @This();
+
+    pub fn stationary_init(center: @Vector(3, f64), radius: f64, mat: Material) sphere {
+        const rvec: @Vector(3, f64) = init(radius, radius, radius);
+        const bbox: aabb = aabb.alt_init(center - rvec, center + rvec);
+        return sphere{ .center = center, .radius = radius, .mat = mat, .is_moving = false, .center_vec = null, .bbox = bbox };
+    }
+
+    pub fn moving_init(center1: @Vector(3, f64), center2: @Vector(3, f64), radius: f64, mat: Material) sphere {
+        const rvec: @Vector(3, f64) = init(radius, radius, radius);
+        const box1: aabb = aabb.alt_init(center1 - rvec, center1 + rvec);
+        const box2: aabb = aabb.alt_init(center2 - rvec, center2 + rvec);
+        const bbox: aabb = aabb.aabb_init(box1, box2);
+        const center_vec = center2 - center1;
+        return sphere{ .center = center1, .radius = radius, .mat = mat, .is_moving = true, .center_vec = center_vec, .bbox = bbox };
+    }
 
     pub fn set_center_vector(center1: @Vector(3, f64), center2: @Vector(3, f64)) @Vector(3, f64) {
         return center2 - center1;

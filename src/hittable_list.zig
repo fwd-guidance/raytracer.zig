@@ -7,6 +7,7 @@ const hit_record = rtw.hittable.hit_record;
 const Sphere = rtw.sphere.sphere;
 const Material = rtw.material.Material;
 const ArrayList = std.ArrayList;
+const aabb = rtw.aabb;
 
 pub const HittableList = struct {
     objects: ArrayList(Sphere),
@@ -40,4 +41,8 @@ pub const HittableList = struct {
         }
         return hit_anything;
     }
+
+    //pub fn bounding_box(self: Sphere) aabb {
+    //    return self.bbox;
+    //}
 };

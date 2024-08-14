@@ -26,6 +26,9 @@ pub const Camera = camera.Camera;
 pub const material = @import("material.zig");
 pub const Material = material.Material;
 
+pub const AABB = @import("aabb.zig");
+pub const aabb = AABB.aabb;
+
 pub fn random_double() f64 {
     const rand = std.crypto.random;
     return rand.float(f64);
