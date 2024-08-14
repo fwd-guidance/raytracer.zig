@@ -98,8 +98,9 @@ pub const Camera = struct {
         const pixel_sample: @Vector(3, f64) = self.*.pixel00_loc + (init(i + offset[0], i + offset[0], i + offset[0]) * self.*.pixel_delta_u) + (init(j + offset[1], j + offset[1], j + offset[1]) * self.*.pixel_delta_v);
         const ray_origin: @Vector(3, f64) = if (self.*.defocus_angle <= 0) self.*.center else defocus_disk_sample(self);
         const ray_direction: @Vector(3, f64) = pixel_sample - ray_origin;
+        const ray_time: f64 = random_double();
 
-        return Ray{ .origin = ray_origin, .direction = ray_direction };
+        return Ray{ .origin = ray_origin, .direction = ray_direction, .tm = ray_time };
     }
 
     fn sample_square() @Vector(3, f64) {

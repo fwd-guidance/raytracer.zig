@@ -12,10 +12,21 @@ pub const sphere = struct {
     center: @Vector(3, f64),
     radius: f64,
     mat: Material,
+    is_moving: bool,
+    center_vec: ?@Vector(3, f64),
     const Self = @This();
 
+    pub fn set_center_vector(center1: @Vector(3, f64), center2: @Vector(3, f64)) @Vector(3, f64) {
+        return center2 - center1;
+    }
+
+    pub fn sphere_center(self: Self, time: f64) !@Vector(3, f64) {
+        return self.center + try rtw.vec.scale(self.center_vec.?, time);
+    }
+
     pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
-        const oc: @Vector(3, f64) = self.center - r.*.origin;
+        const center: @Vector(3, f64) = if (self.is_moving) try sphere_center(self, r.*.tm) else self.center;
+        const oc: @Vector(3, f64) = center - r.*.origin;
         const a: f64 = try vec.square_magnitude(r.*.direction);
         const h: f64 = try vec.dot(r.*.direction, oc);
         const c: f64 = try vec.square_magnitude(oc) - self.radius * self.radius;

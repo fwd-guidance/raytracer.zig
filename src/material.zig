@@ -26,11 +26,10 @@ pub const Lambertian = struct {
     const Self = @This();
 
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !bool {
-        _ = r_in;
         var scatter_direction: @Vector(3, f64) = rec.*.normal + rtw.vec.random_unit_vector();
 
         if (try rtw.vec.near_zero(scatter_direction)) scatter_direction = rec.*.normal;
-        scattered.* = Ray{ .origin = rec.*.p, .direction = scatter_direction };
+        scattered.* = Ray{ .origin = rec.*.p, .direction = scatter_direction, .tm = r_in.*.tm };
         attenuation.* = self.albedo;
         return true;
     }
@@ -44,7 +43,7 @@ pub const Metal = struct {
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f64), scattered: *Ray) !bool {
         var reflected = try rtw.vec.reflect(&r_in.direction, &rec.normal);
         reflected = try rtw.vec.unit(reflected) + (try rtw.vec.scale(rtw.vec.random_unit_vector(), self.fuzz));
-        scattered.* = Ray{ .origin = rec.*.p, .direction = reflected };
+        scattered.* = Ray{ .origin = rec.*.p, .direction = reflected, .tm = r_in.*.tm };
         attenuation.* = self.albedo;
         return try rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0;
     }
@@ -70,7 +69,7 @@ pub const Dielectric = struct {
             direction = try rtw.vec.refract(&unit_direction, rec.*.normal, ri);
         }
 
-        scattered.* = Ray{ .origin = rec.*.p, .direction = direction };
+        scattered.* = Ray{ .origin = rec.*.p, .direction = direction, .tm = r_in.*.tm };
         return true;
     }
 
