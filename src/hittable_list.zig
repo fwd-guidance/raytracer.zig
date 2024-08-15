@@ -11,6 +11,7 @@ const aabb = rtw.aabb;
 
 pub const HittableList = struct {
     objects: ArrayList(Sphere),
+    bbox: aabb,
 
     const Self = @This();
 
@@ -24,6 +25,7 @@ pub const HittableList = struct {
 
     pub fn add(self: *Self, _sphere: Sphere) anyerror!*Self {
         try self.*.objects.append(_sphere);
+        self.*.bbox = aabb.aabb_init(self.*.bbox, bounding_box(_sphere));
         return self;
     }
 
@@ -42,7 +44,7 @@ pub const HittableList = struct {
         return hit_anything;
     }
 
-    //pub fn bounding_box(self: Sphere) aabb {
-    //    return self.bbox;
-    //}
+    pub fn bounding_box(self: Sphere) aabb {
+        return self.bbox;
+    }
 };

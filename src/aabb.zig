@@ -2,16 +2,20 @@ const rtw = @import("rtweekend.zig");
 const Interval = rtw.interval.Interval;
 
 pub const aabb = struct {
-    x: Interval,
-    y: Interval,
-    z: Interval,
+    x: ?Interval,
+    y: ?Interval,
+    z: ?Interval,
     const Self = @This();
 
-    pub fn init(x: Interval, y: Interval, z: Interval) aabb {
+    pub fn default_aabb() aabb {
+        return aabb{ .x = null, .y = null, .z = null };
+    }
+
+    pub fn interval_init(x: Interval, y: Interval, z: Interval) aabb {
         return aabb{ .x = x, .y = y, .z = z };
     }
 
-    pub fn alt_init(a: @Vector(3, f64), b: @Vector(3, f64)) aabb {
+    pub fn vec_init(a: @Vector(3, f64), b: @Vector(3, f64)) aabb {
         return aabb{
             .x = if (a[0] <= b[0]) Interval{ a[0], b[0] } else Interval{ b[0], a[0] },
             .y = if (a[1] <= b[1]) Interval{ a[1], b[1] } else Interval{ b[1], a[1] },
@@ -23,7 +27,7 @@ pub const aabb = struct {
         return aabb{ .x = Interval{ box0.x, box1.x }, .y = Interval{ box0.y, box1.y }, .z = Interval{ box0.z, box1.z } };
     }
 
-    pub fn axis_interval(self: Self, n: i8) !*Interval {
+    pub fn axis_interval(self: Self, n: i8) !*const Interval {
         if (n == 1) return &self.y;
         if (n == 2) return &self.z;
         return &self.x;
@@ -35,7 +39,7 @@ pub const aabb = struct {
 
         var axis: i8 = 0;
         while (axis < 3) : (axis += 1) {
-            const ax: *const Interval = axis_interval(self, axis);
+            const ax: *const Interval = try axis_interval(self, axis);
             const adinv: f64 = 1.0 / ray_dir[axis];
 
             const t0: f64 = (ax.min - ray_orig[axis]) * adinv;

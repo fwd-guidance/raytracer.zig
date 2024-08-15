@@ -18,18 +18,22 @@ pub const sphere = struct {
     bbox: aabb,
     const Self = @This();
 
+    pub fn bounding_box(self: Self) aabb {
+        return self.bbox;
+    }
+
     pub fn stationary_init(center: @Vector(3, f64), radius: f64, mat: Material) sphere {
         const rvec: @Vector(3, f64) = init(radius, radius, radius);
-        const bbox: aabb = aabb.alt_init(center - rvec, center + rvec);
+        const bbox: aabb = aabb.vec_init(center - rvec, center + rvec);
         return sphere{ .center = center, .radius = radius, .mat = mat, .is_moving = false, .center_vec = null, .bbox = bbox };
     }
 
     pub fn moving_init(center1: @Vector(3, f64), center2: @Vector(3, f64), radius: f64, mat: Material) sphere {
         const rvec: @Vector(3, f64) = init(radius, radius, radius);
-        const box1: aabb = aabb.alt_init(center1 - rvec, center1 + rvec);
-        const box2: aabb = aabb.alt_init(center2 - rvec, center2 + rvec);
+        const box1: aabb = aabb.vec_init(center1 - rvec, center1 + rvec);
+        const box2: aabb = aabb.vec_init(center2 - rvec, center2 + rvec);
         const bbox: aabb = aabb.aabb_init(box1, box2);
-        const center_vec = center2 - center1;
+        const center_vec: @Vector(3, f64) = center2 - center1;
         return sphere{ .center = center1, .radius = radius, .mat = mat, .is_moving = true, .center_vec = center_vec, .bbox = bbox };
     }
 
