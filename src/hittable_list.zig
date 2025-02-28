@@ -11,12 +11,12 @@ const aabb = rtw.aabb;
 
 pub const HittableList = struct {
     objects: ArrayList(Sphere),
-    bbox: aabb,
+    bbox: ?aabb,
 
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator) Self {
-        return Self{ .objects = ArrayList(Sphere).init(allocator) };
+        return Self{ .objects = ArrayList(Sphere).init(allocator), .bbox = null };
     }
 
     pub fn deinit(self: *Self) void {

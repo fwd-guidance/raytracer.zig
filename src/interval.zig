@@ -3,7 +3,7 @@ pub const Interval = struct {
     max: f64,
     const Self = @This();
 
-    pub fn init(a: *const Self, b: *const Self) Interval {
+    pub fn init(a: ?Self, b: Self) Interval {
         return Interval{ .min = if (a.min <= b.min) a.min else b.min, .max = if (a.max >= b.max) a.max else b.max };
     }
 

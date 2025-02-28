@@ -2,12 +2,12 @@ const rtw = @import("rtweekend.zig");
 const Interval = rtw.interval.Interval;
 
 pub const aabb = struct {
-    x: ?Interval,
-    y: ?Interval,
-    z: ?Interval,
+    x: Interval,
+    y: Interval,
+    z: Interval,
     const Self = @This();
 
-    pub fn default_aabb() aabb {
+    pub fn empty_aabb() aabb {
         return aabb{ .x = null, .y = null, .z = null };
     }
 
@@ -17,20 +17,20 @@ pub const aabb = struct {
 
     pub fn vec_init(a: @Vector(3, f64), b: @Vector(3, f64)) aabb {
         return aabb{
-            .x = if (a[0] <= b[0]) Interval{ a[0], b[0] } else Interval{ b[0], a[0] },
-            .y = if (a[1] <= b[1]) Interval{ a[1], b[1] } else Interval{ b[1], a[1] },
-            .z = if (a[2] <= b[2]) Interval{ a[2], b[2] } else Interval{ b[2], a[2] },
+            .x = if (a[0] <= b[0]) Interval{ .min = a[0], .max = b[0] } else Interval{ .min = b[0], .max = a[0] },
+            .y = if (a[1] <= b[1]) Interval{ .min = a[1], .max = b[1] } else Interval{ .min = b[1], .max = a[1] },
+            .z = if (a[2] <= b[2]) Interval{ .min = a[2], .max = b[2] } else Interval{ .min = b[2], .max = a[2] },
         };
     }
 
-    pub fn aabb_init(box0: *const aabb, box1: *const aabb) aabb {
-        return aabb{ .x = Interval{ box0.x, box1.x }, .y = Interval{ box0.y, box1.y }, .z = Interval{ box0.z, box1.z } };
+    pub fn aabb_init(box0: ?aabb, box1: aabb) aabb {
+        return aabb{ .x = Interval.init(box0.x, box1.x), .y = Interval.init(box0.y, box1.y), .z = Interval.init(box0.z, box1.z) };
     }
 
-    pub fn axis_interval(self: Self, n: i8) !*const Interval {
-        if (n == 1) return &self.y;
-        if (n == 2) return &self.z;
-        return &self.x;
+    pub fn axis_interval(self: Self, n: i8) !Interval {
+        if (n == 1) return self.y;
+        if (n == 2) return self.z;
+        return self.x;
     }
 
     pub fn hit(self: Self, r: *const rtw.Ray, ray_t: Interval) !bool {
