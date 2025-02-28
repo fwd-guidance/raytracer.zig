@@ -69,6 +69,9 @@ pub fn draw_ppm() !void {
     cam.defocus_angle = 0.6;
     cam.focus_dist = 10.0;
 
+    // The renderer will automatically determine the number of threads
+    // based on available CPU cores and initialize the mutex
+
     try cam.render(&world);
 }
 
