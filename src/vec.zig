@@ -3,6 +3,38 @@ const random_double = rtw.random_double;
 const random_double_range = rtw.random_double_range;
 const std = rtw.std;
 
+// Vec3 type for clearer type handling
+pub const Vec3 = struct {
+    vec: @Vector(3, f64),
+    
+    pub fn init(x_val: f64, y_val: f64, z_val: f64) Vec3 {
+        return Vec3{ .vec = @Vector(3, f64){ x_val, y_val, z_val } };
+    }
+    
+    pub fn initFromVector(v: @Vector(3, f64)) Vec3 {
+        return Vec3{ .vec = v };
+    }
+    
+    pub fn x(self: Vec3) f64 {
+        return self.vec[0];
+    }
+    
+    pub fn y(self: Vec3) f64 {
+        return self.vec[1];
+    }
+    
+    pub fn z(self: Vec3) f64 {
+        return self.vec[2];
+    }
+    
+    pub fn toVector(self: Vec3) @Vector(3, f64) {
+        return self.vec;
+    }
+};
+
+// Point3 type alias for clarity in code
+pub const Point3 = Vec3;
+
 pub fn init(x: f64, y: f64, z: f64) @Vector(3, f64) {
     return @Vector(3, f64){ x, y, z };
 }

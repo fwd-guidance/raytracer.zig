@@ -6,6 +6,8 @@ const std = rtw.std;
 const hittable_list = rtw.HittableList.HittableList;
 const Camera = rtw.camera.Camera;
 const Material = rtw.material.Material;
+const AABB = @import("aabb.zig").AABB;
+const BVHNode = @import("bvh.zig").BVHNode;
 
 pub fn draw_ppm() !void {
 
@@ -36,31 +38,36 @@ pub fn draw_ppm() !void {
                 if (choose_mat < 0.8) {
                     const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
                     const sphere_material = Material.lambertian(albedo);
-                    _ = try world.add(Sphere{ .center = center, .radius = 0.2, .mat = sphere_material });
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
                 } else if (choose_mat < 0.95) {
                     const albedo = rtw.vec.random_vec_range(0.5, 1.0);
                     const fuzz = rtw.random_double_range(0, 0.5);
                     const sphere_material = Material.metal(albedo, fuzz);
-                    _ = try world.add(Sphere{ .center = center, .radius = 0.2, .mat = sphere_material });
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
                 } else {
                     const sphere_material = Material.dielectric(1.5);
-                    _ = try world.add(Sphere{ .center = center, .radius = 0.2, .mat = sphere_material });
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
                 }
             }
         }
     }
 
-    _ = try world.add(Sphere{ .center = init(0, 1, 0), .radius = 1.0, .mat = material1 });
-    _ = try world.add(Sphere{ .center = init(-4, 1, 0), .radius = 1.0, .mat = material2 });
-    _ = try world.add(Sphere{ .center = init(4, 1, 0), .radius = 1.0, .mat = material3 });
-    _ = try world.add(Sphere{ .center = init(0.0, -1000, 0), .radius = 1000, .mat = material_ground });
+    _ = try world.add(Sphere.init(init(0, 1, 0), 1.0, material1));
+    _ = try world.add(Sphere.init(init(-4, 1, 0), 1.0, material2));
+    _ = try world.add(Sphere.init(init(4, 1, 0), 1.0, material3));
+    _ = try world.add(Sphere.init(init(0.0, -1000, 0), 1000, material_ground));
+
+    // Build the BVH for faster rendering
+    std.debug.print("Building BVH...\n", .{});
+    try world.buildBVH();
+    std.debug.print("BVH built successfully.\n", .{});
 
     // Camera
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
-    cam.image_width = 400;
-    cam.samples_per_pixel = 10;
-    cam.max_depth = 5;
+    cam.image_width = 1200;
+    cam.samples_per_pixel = 500;
+    cam.max_depth = 50;
 
     cam.vfov = 20;
     cam.lookfrom = @Vector(3, f64){ 13, 2, 3 };

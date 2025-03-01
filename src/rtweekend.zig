@@ -8,6 +8,8 @@ pub const Ray = ray.Ray;
 
 pub const vec = @import("vec.zig");
 pub const init = vec.init;
+pub const Vec3 = vec.Vec3;
+pub const Point3 = vec.Point3;
 
 pub const hittable = @import("hittable.zig");
 pub const hit_record = hittable.hit_record;
@@ -25,6 +27,13 @@ pub const Camera = camera.Camera;
 
 pub const material = @import("material.zig");
 pub const Material = material.Material;
+
+pub const aabb = @import("aabb.zig");
+pub const AABB = aabb.AABB;
+
+pub const bvh = @import("bvh.zig");
+pub const BVHNode = bvh.BVHNode;
+pub const Hittable = bvh.Hittable;
 
 pub fn random_double() f64 {
     const rand = std.crypto.random;
