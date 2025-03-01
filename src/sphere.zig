@@ -15,20 +15,20 @@ pub const sphere = struct {
     center: @Vector(3, f64),
     radius: f64,
     mat: Material,
-    bbox: AABB,  // Cached bounding box
-    
+    bbox: AABB, // Cached bounding box
+
     const Self = @This();
-    
+
     pub fn init(center: @Vector(3, f64), radius: f64, mat: Material) Self {
         // Create the sphere and its bounding box
         const radius_vec = @Vector(3, f64){ radius, radius, radius };
         const min_point = center - radius_vec;
         const max_point = center + radius_vec;
-        
+
         const x_interval = Interval.init(min_point[0], max_point[0]);
         const y_interval = Interval.init(min_point[1], max_point[1]);
         const z_interval = Interval.init(min_point[2], max_point[2]);
-        
+
         return Self{
             .center = center,
             .radius = radius,
@@ -37,39 +37,12 @@ pub const sphere = struct {
         };
     }
 
-    pub fn bounding_box(self: Self) aabb {
-        return self.bbox;
-    }
-
-    pub fn stationary_init(center: @Vector(3, f64), radius: f64, mat: Material) sphere {
-        const rvec: @Vector(3, f64) = init(radius, radius, radius);
-        const bbox: aabb = aabb.vec_init(center - rvec, center + rvec);
-        return sphere{ .center = center, .radius = radius, .mat = mat, .is_moving = false, .center_vec = null, .bbox = bbox };
-    }
-
-    pub fn moving_init(center1: @Vector(3, f64), center2: @Vector(3, f64), radius: f64, mat: Material) sphere {
-        const rvec: @Vector(3, f64) = init(radius, radius, radius);
-        const box1: aabb = aabb.vec_init(center1 - rvec, center1 + rvec);
-        const box2: aabb = aabb.vec_init(center2 - rvec, center2 + rvec);
-        const bbox: aabb = aabb.aabb_init(box1, box2);
-        const center_vec: @Vector(3, f64) = center2 - center1;
-        return sphere{ .center = center1, .radius = radius, .mat = mat, .is_moving = true, .center_vec = center_vec, .bbox = bbox };
-    }
-
-    pub fn set_center_vector(center1: @Vector(3, f64), center2: @Vector(3, f64)) @Vector(3, f64) {
-        return center2 - center1;
-    }
-
-    pub fn sphere_center(self: Self, time: f64) !@Vector(3, f64) {
-        return self.center + try rtw.vec.scale(self.center_vec.?, time);
-    }
-
     pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
         // First test if ray hits the bounding box
         if (!self.bbox.hit(r.*, ray_t)) {
             return false;
         }
-        
+
         const oc: @Vector(3, f64) = self.center - r.*.origin;
         const a: f64 = try vec.square_magnitude(r.*.direction);
         const h: f64 = try vec.dot(r.*.direction, oc);
@@ -96,7 +69,7 @@ pub const sphere = struct {
 
         return true;
     }
-    
+
     pub fn boundingBox(self: Self) AABB {
         return self.bbox;
     }

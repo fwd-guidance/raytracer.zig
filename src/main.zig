@@ -21,19 +21,19 @@ pub fn draw_ppm() !void {
     var world = hittable_list.init(allocator);
     defer world.deinit();
 
-    //const material_ground = Material.lambertian(@Vector(3, f64){ 0.5, 0.5, 0.5 });
+    const material_ground = Material.lambertian(@Vector(3, f64){ 0.5, 0.5, 0.5 });
     //const material_center = Material.lambertian(@Vector(3, f64){ 0.1, 0.2, 0.5 });
-    //const material1 = Material.dielectric(1.50);
+    const material1 = Material.dielectric(1.50);
     //const material_bubble = Material.dielectric(1.00 / 1.50);
     //const material_right = Material.metal(@Vector(3, f64){ 0.8, 0.6, 0.2 }, 1.0);
     const material2 = Material.lambertian(@Vector(3, f64){ 0.4, 0.2, 0.1 });
-    //const material3 = Material.metal(@Vector(3, f64){ 0.7, 0.6, 0.5 }, 0.0);
+    const material3 = Material.metal(@Vector(3, f64){ 0.7, 0.6, 0.5 }, 0.0);
 
-    //var a: f64 = -11;
-    //while (a < 11) : (a += 1) {
-    //    var b: f64 = -11;
-    //    while (b < 11) : (b += 1) {
-    //        const choose_mat = rtw.random_double();
+    var a: f64 = -11;
+    while (a < 11) : (a += 1) {
+        var b: f64 = -11;
+        while (b < 11) : (b += 1) {
+            const choose_mat = rtw.random_double();
 
             const center: @Vector(3, f64) = @Vector(3, f64){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
             if (try rtw.vec.magnitude(center - @Vector(3, f64){ 4.0, 0.2, 0.0 }) > 0.9) {
@@ -68,8 +68,8 @@ pub fn draw_ppm() !void {
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
     cam.image_width = 1200;
-    cam.samples_per_pixel = 500;
-    cam.max_depth = 50;
+    cam.samples_per_pixel = 20;
+    cam.max_depth = 5;
 
     cam.vfov = 20;
     cam.lookfrom = @Vector(3, f64){ 13, 2, 3 };
