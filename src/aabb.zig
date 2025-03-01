@@ -1,60 +1,94 @@
-const rtw = @import("rtweekend.zig");
-const Interval = rtw.interval.Interval;
+const std = @import("std");
+const Interval = @import("interval.zig").Interval;
+const Ray = @import("ray.zig").Ray;
+const Vec3 = @import("vec.zig").Vec3;
+const Point3 = @import("vec.zig").Point3;
 
-pub const aabb = struct {
+pub const AABB = struct {
     x: Interval,
     y: Interval,
     z: Interval,
-    const Self = @This();
 
-    pub fn empty_aabb() aabb {
-        return aabb{ .x = null, .y = null, .z = null };
-    }
-
-    pub fn interval_init(x: Interval, y: Interval, z: Interval) aabb {
-        return aabb{ .x = x, .y = y, .z = z };
-    }
-
-    pub fn vec_init(a: @Vector(3, f64), b: @Vector(3, f64)) aabb {
-        return aabb{
-            .x = if (a[0] <= b[0]) Interval{ .min = a[0], .max = b[0] } else Interval{ .min = b[0], .max = a[0] },
-            .y = if (a[1] <= b[1]) Interval{ .min = a[1], .max = b[1] } else Interval{ .min = b[1], .max = a[1] },
-            .z = if (a[2] <= b[2]) Interval{ .min = a[2], .max = b[2] } else Interval{ .min = b[2], .max = a[2] },
+    pub fn init(x: Interval, y: Interval, z: Interval) AABB {
+        return AABB{
+            .x = x,
+            .y = y,
+            .z = z,
         };
     }
 
-    pub fn aabb_init(box0: ?aabb, box1: aabb) aabb {
-        return aabb{ .x = Interval.init(box0.x, box1.x), .y = Interval.init(box0.y, box1.y), .z = Interval.init(box0.z, box1.z) };
+    pub fn empty() AABB {
+        const empty_interval = Interval.empty();
+        return AABB.init(empty_interval, empty_interval, empty_interval);
     }
 
-    pub fn axis_interval(self: Self, n: i8) !Interval {
-        if (n == 1) return self.y;
-        if (n == 2) return self.z;
-        return self.x;
+    pub fn fromPoints(a: Point3, b: Point3) AABB {
+        // The bounding box containing both points
+        return AABB{
+            .x = Interval.init(@min(a.x(), b.x()), @max(a.x(), b.x())),
+            .y = Interval.init(@min(a.y(), b.y()), @max(a.y(), b.y())),
+            .z = Interval.init(@min(a.z(), b.z()), @max(a.z(), b.z())),
+        };
     }
 
-    pub fn hit(self: Self, r: *const rtw.Ray, ray_t: Interval) !bool {
-        const ray_orig: @Vector(3, f64) = r.*.origin;
-        const ray_dir: @Vector(3, f64) = r.*.direction;
+    pub fn pad(self: AABB) AABB {
+        // Return a new bounding box that is slightly larger than the original
+        const delta = 0.0001;
+        const new_x = if (self.x.size() >= delta) self.x else self.x.expand(delta);
+        const new_y = if (self.y.size() >= delta) self.y else self.y.expand(delta);
+        const new_z = if (self.z.size() >= delta) self.z else self.z.expand(delta);
 
-        var axis: i8 = 0;
-        while (axis < 3) : (axis += 1) {
-            const ax: *const Interval = try axis_interval(self, axis);
-            const adinv: f64 = 1.0 / ray_dir[axis];
+        return AABB{
+            .x = new_x,
+            .y = new_y,
+            .z = new_z,
+        };
+    }
 
-            const t0: f64 = (ax.min - ray_orig[axis]) * adinv;
-            const t1: f64 = (ax.max - ray_orig[axis]) * adinv;
+    pub fn merge(a: AABB, b: AABB) AABB {
+        return AABB{
+            .x = Interval.merge(a.x, b.x),
+            .y = Interval.merge(a.y, b.y),
+            .z = Interval.merge(a.z, b.z),
+        };
+    }
 
-            if (t0 < t1) {
-                if (t0 > ray_t.min) ray_t.min = t0;
-                if (t1 < ray_t.max) ray_t.max = t1;
-            } else {
-                if (t1 > ray_t.min) ray_t.min = t1;
-                if (t0 < ray_t.max) ray_t.max = t0;
+    pub fn hit(self: AABB, r: Ray, ray_t: Interval) bool {
+        // For each dimension, compute the times the ray enters and exits the box
+        var t_min = ray_t.min;
+        var t_max = ray_t.max;
+
+        // Loop over the three dimensions for x=0, y=1, z=2
+        inline for (0..3) |dim| {
+            const invD = 1.0 / r.direction[dim];
+            const orig = r.origin[dim];
+            const interval = switch (dim) {
+                0 => self.x,
+                1 => self.y,
+                2 => self.z,
+                else => unreachable,
+            };
+
+            // Calculate intersection with current axis
+            var t0 = (interval.min - orig) * invD;
+            var t1 = (interval.max - orig) * invD;
+
+            // If ray is traveling in negative direction, swap t0 and t1
+            if (invD < 0.0) {
+                const temp = t0;
+                t0 = t1;
+                t1 = temp;
             }
 
-            if (ray_t.max <= ray_t.min) return false;
+            // Update overall intersection interval
+            t_min = @max(t0, t_min);
+            t_max = @min(t1, t_max);
+
+            if (t_max <= t_min) {
+                return false; // No intersection with this box
+            }
         }
-        return true;
+
+        return true; // Ray intersects box
     }
 };

@@ -6,6 +6,8 @@ const std = rtw.std;
 const hittable_list = rtw.HittableList.HittableList;
 const Camera = rtw.camera.Camera;
 const Material = rtw.material.Material;
+const AABB = @import("aabb.zig").AABB;
+const BVHNode = @import("bvh.zig").BVHNode;
 
 pub fn draw_ppm() !void {
 
@@ -33,40 +35,41 @@ pub fn draw_ppm() !void {
     //    while (b < 11) : (b += 1) {
     //        const choose_mat = rtw.random_double();
 
-    //        const center: @Vector(3, f64) = @Vector(3, f64){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
+            const center: @Vector(3, f64) = @Vector(3, f64){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
+            if (try rtw.vec.magnitude(center - @Vector(3, f64){ 4.0, 0.2, 0.0 }) > 0.9) {
+                if (choose_mat < 0.8) {
+                    const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
+                    const sphere_material = Material.lambertian(albedo);
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
+                } else if (choose_mat < 0.95) {
+                    const albedo = rtw.vec.random_vec_range(0.5, 1.0);
+                    const fuzz = rtw.random_double_range(0, 0.5);
+                    const sphere_material = Material.metal(albedo, fuzz);
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
+                } else {
+                    const sphere_material = Material.dielectric(1.5);
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
+                }
+            }
+        }
+    }
 
-    //        if (try rtw.vec.magnitude(center - @Vector(3, f64){ 4.0, 0.2, 0.0 }) > 0.9) {
-    //            if (choose_mat < 0.8) {
-    //                const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
-    //                const sphere_material = Material.lambertian(albedo);
-    //                const center2 = center + @Vector(3, f64){ 0, rtw.random_double_range(0, 0.5), 0 };
-    //                _ = try world.add(Sphere{ .center = center, .radius = 0.2, .mat = sphere_material, .is_moving = true, .center_vec = rtw.sphere.sphere.set_center_vector(center, center2) });
-    //            } else if (choose_mat < 0.95) {
-    //                const albedo = rtw.vec.random_vec_range(0.5, 1.0);
-    //                const fuzz = rtw.random_double_range(0, 0.5);
-    //                const sphere_material = Material.metal(albedo, fuzz);
-    //                _ = try world.add(Sphere{ .center = center, .radius = 0.2, .mat = sphere_material, .is_moving = false, .center_vec = null });
-    //            } else {
-    //                const sphere_material = Material.dielectric(1.5);
-    //                _ = try world.add(Sphere{ .center = center, .radius = 0.2, .mat = sphere_material, .is_moving = false, .center_vec = null });
-    //            }
-    //        }
-    //    }
-    //}
-    const my_sphere = Sphere.stationary_init(init(4, 1, 0), 1.0, material2);
-    _ = try world.add(my_sphere);
-    //_ = try world.add(Sphere{ .center = init(0, 1, 0), .radius = 1.0, .mat = material1, .is_moving = false, .center_vec = null });
-    //_ = try world.add(Sphere{ .center = init(-4, 1, 0), .radius = 1.0, .mat = material2, .is_moving = false, .center_vec = null });
-    //_ = try world.add(Sphere{ .center = init(4, 1, 0), .radius = 1.0, .mat = material3, .is_moving = false, .center_vec = null });
-    //_ = try world.add(Sphere{ .center = init(1.0, 0, -1), .radius = 0.5, .mat = material_right });
-    //_ = try world.add(Sphere{ .center = init(0.0, -1000, 0), .radius = 1000, .mat = material_ground, .is_moving = false, .center_vec = null });
+    _ = try world.add(Sphere.init(init(0, 1, 0), 1.0, material1));
+    _ = try world.add(Sphere.init(init(-4, 1, 0), 1.0, material2));
+    _ = try world.add(Sphere.init(init(4, 1, 0), 1.0, material3));
+    _ = try world.add(Sphere.init(init(0.0, -1000, 0), 1000, material_ground));
+
+    // Build the BVH for faster rendering
+    std.debug.print("Building BVH...\n", .{});
+    try world.buildBVH();
+    std.debug.print("BVH built successfully.\n", .{});
 
     // Camera
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
-    cam.image_width = 400;
-    cam.samples_per_pixel = 100;
-    cam.max_depth = 100;
+    cam.image_width = 1200;
+    cam.samples_per_pixel = 500;
+    cam.max_depth = 50;
 
     cam.vfov = 20;
     cam.lookfrom = @Vector(3, f64){ 13, 2, 3 };
@@ -74,6 +77,9 @@ pub fn draw_ppm() !void {
     cam.vup = @Vector(3, f64){ 0, 1, 0 };
     cam.defocus_angle = 0.6;
     cam.focus_dist = 10.0;
+
+    // The renderer will automatically determine the number of threads
+    // based on available CPU cores and initialize the mutex
 
     try cam.render(&world);
 }

@@ -1,12 +1,31 @@
+const std = @import("std");
+
 pub const Interval = struct {
     min: f64,
     max: f64,
     const Self = @This();
 
-    pub fn init(a: ?Self, b: Self) Interval {
-        return Interval{ .min = if (a.min <= b.min) a.min else b.min, .max = if (a.max >= b.max) a.max else b.max };
+    pub fn init(min: f64, max: f64) Self {
+        return Self{
+            .min = min,
+            .max = max,
+        };
     }
 
+    pub fn empty() Self {
+        return Self{
+            .min = std.math.inf(f64),
+            .max = -std.math.inf(f64),
+        };
+    }
+
+    pub fn universe() Self {
+        return Self{
+            .min = -std.math.inf(f64),
+            .max = std.math.inf(f64),
+        };
+    }
+    
     pub fn size(self: Self) f64 {
         return self.max - self.min;
     }
@@ -24,9 +43,19 @@ pub const Interval = struct {
         if (x > self.max) return self.max;
         return x;
     }
-
-    pub fn expand(self: Self, delta: f64) Interval {
-        const padding: f64 = delta / 2;
-        return Interval{ .min = self.min - padding, .max = self.max + padding };
+    
+    pub fn expand(self: Self, delta: f64) Self {
+        const padding = delta / 2.0;
+        return Self{
+            .min = self.min - padding,
+            .max = self.max + padding,
+        };
+    }
+    
+    pub fn merge(a: Self, b: Self) Self {
+        return Self{
+            .min = @min(a.min, b.min),
+            .max = @max(a.max, b.max),
+        };
     }
 };
