@@ -1,11 +1,11 @@
 const std = @import("std");
 
 pub const Interval = struct {
-    min: f64,
-    max: f64,
+    min: f32,
+    max: f32,
     const Self = @This();
 
-    pub fn init(min: f64, max: f64) Self {
+    pub fn init(min: f32, max: f32) Self {
         return Self{
             .min = min,
             .max = max,
@@ -14,37 +14,37 @@ pub const Interval = struct {
 
     pub fn empty() Self {
         return Self{
-            .min = std.math.inf(f64),
-            .max = -std.math.inf(f64),
+            .min = std.math.inf(f32),
+            .max = -std.math.inf(f32),
         };
     }
 
     pub fn universe() Self {
         return Self{
-            .min = -std.math.inf(f64),
-            .max = std.math.inf(f64),
+            .min = -std.math.inf(f32),
+            .max = std.math.inf(f32),
         };
     }
     
-    pub fn size(self: Self) f64 {
+    pub fn size(self: Self) f32 {
         return self.max - self.min;
     }
 
-    pub fn contains(self: Self, x: f64) bool {
+    pub fn contains(self: Self, x: f32) bool {
         return self.min <= x and x <= self.max;
     }
 
-    pub fn surrounds(self: Self, x: f64) bool {
+    pub fn surrounds(self: Self, x: f32) bool {
         return self.min < x and x < self.max;
     }
 
-    pub fn clamp(self: Self, x: f64) f64 {
+    pub fn clamp(self: Self, x: f32) f32 {
         if (x < self.min) return self.min;
         if (x > self.max) return self.max;
         return x;
     }
     
-    pub fn expand(self: Self, delta: f64) Self {
+    pub fn expand(self: Self, delta: f32) Self {
         const padding = delta / 2.0;
         return Self{
             .min = self.min - padding,

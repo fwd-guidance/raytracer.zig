@@ -35,15 +35,15 @@ pub const bvh = @import("bvh.zig");
 pub const BVHNode = bvh.BVHNode;
 pub const Hittable = bvh.Hittable;
 
-pub fn random_double() f64 {
+pub fn random_double() f32 {
     const rand = std.crypto.random;
-    return rand.float(f64);
+    return rand.float(f32);
 }
 
-pub fn random_double_range(min: f64, max: f64) f64 {
+pub fn random_double_range(min: f32, max: f32) f32 {
     return min + (max - min) * random_double();
 }
 
-pub fn random_int(min: f64, max: f64) i64 {
+pub fn random_int(min: f32, max: f32) i64 {
     return @intFromFloat(random_double_range(min, max + 1));
 }

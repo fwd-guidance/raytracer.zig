@@ -12,16 +12,16 @@ const Vec3 = @import("vec.zig").Vec3;
 const Point3 = @import("vec.zig").Point3;
 
 pub const sphere = struct {
-    center: @Vector(3, f64),
-    radius: f64,
+    center: @Vector(3, f32),
+    radius: f32,
     mat: Material,
     bbox: AABB, // Cached bounding box
 
     const Self = @This();
 
-    pub fn init(center: @Vector(3, f64), radius: f64, mat: Material) Self {
+    pub fn init(center: @Vector(3, f32), radius: f32, mat: Material) Self {
         // Create the sphere and its bounding box
-        const radius_vec = @Vector(3, f64){ radius, radius, radius };
+        const radius_vec = @Vector(3, f32){ radius, radius, radius };
         const min_point = center - radius_vec;
         const max_point = center + radius_vec;
 
@@ -43,16 +43,16 @@ pub const sphere = struct {
             return false;
         }
 
-        const oc: @Vector(3, f64) = self.center - r.*.origin;
-        const a: f64 = try vec.square_magnitude(r.*.direction);
-        const h: f64 = try vec.dot(r.*.direction, oc);
-        const c: f64 = try vec.square_magnitude(oc) - self.radius * self.radius;
+        const oc: @Vector(3, f32) = self.center - r.*.origin;
+        const a: f32 = try vec.square_magnitude(r.*.direction);
+        const h: f32 = try vec.dot(r.*.direction, oc);
+        const c: f32 = try vec.square_magnitude(oc) - self.radius * self.radius;
 
-        const discriminant: f64 = h * h - a * c;
+        const discriminant: f32 = h * h - a * c;
         if (discriminant < 0) return false;
 
         // Find the nearest root that lies in the acceptable range
-        var root: f64 = (h - std.math.sqrt(discriminant)) / a;
+        var root: f32 = (h - std.math.sqrt(discriminant)) / a;
         if (!ray_t.surrounds(root)) {
             root = (h + std.math.sqrt(discriminant)) / a;
             if (!ray_t.surrounds(root)) {
@@ -63,7 +63,7 @@ pub const sphere = struct {
         rec.*.t = root;
 
         rec.*.p = try r.position(root);
-        const outward_normal: @Vector(3, f64) = (rec.*.p - self.center) / @import("vec.zig").init(self.radius, self.radius, self.radius);
+        const outward_normal: @Vector(3, f32) = (rec.*.p - self.center) / @import("vec.zig").init(self.radius, self.radius, self.radius);
         rec.set_face_normal(r, &outward_normal);
         rec.*.mat = self.mat;
 

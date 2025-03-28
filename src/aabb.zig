@@ -1,8 +1,9 @@
 const std = @import("std");
 const Interval = @import("interval.zig").Interval;
 const Ray = @import("ray.zig").Ray;
-const Vec3 = @import("vec.zig").Vec3;
-const Point3 = @import("vec.zig").Point3;
+const vec = @import("vec.zig");
+//const Vec3 = @import("vec.zig").Vec3;
+//const Point3 = @import("vec.zig").Point3;
 
 pub const AABB = struct {
     x: Interval,
@@ -22,12 +23,12 @@ pub const AABB = struct {
         return AABB.init(empty_interval, empty_interval, empty_interval);
     }
 
-    pub fn fromPoints(a: Point3, b: Point3) AABB {
+    pub fn fromPoints(a: @Vector(3, f32), b: @Vector(3, f32)) AABB {
         // The bounding box containing both points
         return AABB{
-            .x = Interval.init(@min(a.x(), b.x()), @max(a.x(), b.x())),
-            .y = Interval.init(@min(a.y(), b.y()), @max(a.y(), b.y())),
-            .z = Interval.init(@min(a.z(), b.z()), @max(a.z(), b.z())),
+            .x = Interval.init(@min(a[0], b[0]), @max(a[0], b[0])),
+            .y = Interval.init(@min(a[1], b[1]), @max(a[1], b[1])),
+            .z = Interval.init(@min(a[2], b[2]), @max(a[2], b[2])),
         };
     }
 

@@ -5,14 +5,14 @@ const vec = rtw.vec;
 const Material = rtw.Material;
 
 pub const hit_record = struct {
-    p: @Vector(3, f64),
-    t: f64,
+    p: @Vector(3, f32),
+    t: f32,
     mat: Material,
-    normal: @Vector(3, f64),
+    normal: @Vector(3, f32),
     front_face: bool,
     const Self = @This();
 
-    pub fn set_face_normal(self: *Self, r: *const Ray, outward_normal: *const @Vector(3, f64)) void {
+    pub fn set_face_normal(self: *Self, r: *const Ray, outward_normal: *const @Vector(3, f32)) void {
         // Sets the hit record normal Vector
         // NOTE: the parameter outward_normal is assumed to have unit length
 
