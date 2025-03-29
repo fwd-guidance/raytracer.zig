@@ -53,8 +53,42 @@ pub const Camera = struct {
         rows_completed: *AtomicValue(u32),
     };
 
+    // Public method to initialize the camera (without rendering)
+    pub fn initialize(self: *Self) void {
+        self.image_height = if ((self.image_width / self.aspect_ratio) > 1) self.image_width / self.aspect_ratio else 1;
+        self.pixel_samples_scale = @as(f32, 1.0) / self.samples_per_pixel;
+        self.center = self.lookfrom;
+
+        // Camera
+        const theta = std.math.degreesToRadians(self.vfov);
+        const h = std.math.tan(theta / 2);
+        const viewport_height: f32 = 2 * h * self.focus_dist;
+        const viewport_width: f32 = viewport_height * @as(f32, self.image_width / self.image_height);
+        self.w = rtw.vec.unit(self.lookfrom - self.lookat) catch @Vector(3, f32){ 0, 0, 1 };
+        self.u = rtw.vec.unit(rtw.vec.cross(self.vup, self.w) catch @Vector(3, f32){ 1, 0, 0 }) catch @Vector(3, f32){ 1, 0, 0 };
+        self.v = rtw.vec.cross(self.w, self.u) catch @Vector(3, f32){ 0, 1, 0 };
+
+        // Calculate the vectors across the horizontal and down the vertical viewport edges
+        const viewport_u: @Vector(3, f32) = vec.scale(self.u, viewport_width) catch self.u;
+        const viewport_v: @Vector(3, f32) = vec.scale(vec.invert(self.v) catch -self.v, viewport_height) catch -self.v;
+
+        // Calculate the horizontal and vertical delta vectors pixel to pixel
+        self.pixel_delta_u = viewport_u / init(self.image_width, self.image_width, self.image_width);
+        self.pixel_delta_v = viewport_v / init(self.image_height, self.image_height, self.image_height);
+
+        // Calculate the location of the upper left pixel
+        const viewport_upper_left: @Vector(3, f32) = self.center - 
+            (vec.scale(self.w, self.focus_dist) catch self.w) - 
+            (vec.scale(viewport_u, 0.5) catch viewport_u) - 
+            (vec.scale(viewport_v, 0.5) catch viewport_v);
+        self.pixel00_loc = viewport_upper_left + init(0.5, 0.5, 0.5) * (self.pixel_delta_u + self.pixel_delta_v);
+        const defocus_radius: f32 = self.focus_dist * std.math.tan(std.math.degreesToRadians(self.defocus_angle / 2.0));
+        self.defocus_disk_u = vec.scale(self.u, defocus_radius) catch self.u;
+        self.defocus_disk_v = vec.scale(self.v, defocus_radius) catch self.v;
+    }
+
     pub fn render(self: *Self, world: *const hittable_list) !void {
-        initialize(self);
+        self.initialize();
 
         // Initialize mutex for thread synchronization
         self.mutex = Mutex{};
@@ -175,36 +209,6 @@ pub const Camera = struct {
         }
 
         std.debug.print("\rDone.                            \n", .{});
-    }
-
-    fn initialize(self: *Self) void {
-        self.image_height = if ((self.image_width / self.aspect_ratio) > 1) self.image_width / self.aspect_ratio else 1;
-        self.pixel_samples_scale = @as(f32, 1.0) / self.samples_per_pixel;
-        self.center = self.lookfrom;
-
-        // Camera
-        const theta = std.math.degreesToRadians(self.vfov);
-        const h = std.math.tan(theta / 2);
-        const viewport_height: f32 = 2 * h * self.focus_dist;
-        const viewport_width: f32 = viewport_height * @as(f32, self.image_width / self.image_height);
-        self.w = try rtw.vec.unit(self.lookfrom - self.lookat);
-        self.u = try rtw.vec.unit(try rtw.vec.cross(self.vup, self.w));
-        self.v = try rtw.vec.cross(self.w, self.u);
-
-        // Calculate the vectors across the horizontal and down the vertical viewport edges
-        const viewport_u: @Vector(3, f32) = try vec.scale(self.u, viewport_width);
-        const viewport_v: @Vector(3, f32) = try vec.scale(try vec.invert(self.v), viewport_height);
-
-        // Calculate the horizontal and vertical delta vectors pixel to pixel
-        self.pixel_delta_u = viewport_u / init(self.image_width, self.image_width, self.image_width);
-        self.pixel_delta_v = viewport_v / init(self.image_height, self.image_height, self.image_height);
-
-        // Calculate the location of the upper left pixel
-        const viewport_upper_left: @Vector(3, f32) = self.center - (try vec.scale(self.w, self.focus_dist)) - (try vec.scale(viewport_u, 0.5)) - (try vec.scale(viewport_v, 0.5));
-        self.pixel00_loc = viewport_upper_left + init(0.5, 0.5, 0.5) * (self.pixel_delta_u + self.pixel_delta_v);
-        const defocus_radius: f32 = self.focus_dist * std.math.tan(std.math.degreesToRadians(self.defocus_angle / 2.0));
-        self.defocus_disk_u = try vec.scale(self.u, defocus_radius);
-        self.defocus_disk_v = try vec.scale(self.v, defocus_radius);
     }
 
     fn get_ray(self: *Self, i: f32, j: f32) Ray {
