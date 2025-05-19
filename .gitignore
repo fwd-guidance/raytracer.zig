@@ -3,6 +3,7 @@ zig-out/
 .DS_Store
 zig-cache/
 src/root.zig 
+sokol/
 renders/
 TODO.md
 *.ppm
