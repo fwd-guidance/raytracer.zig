@@ -16,6 +16,9 @@ out vec4 frag_color;
 
 // Define constants
 #define MAX_SPHERES 500 // Maximum number of spheres
+#define MAX_BVH_NODES 1000
+//#define MAX_STACK_SIZE 64
+#define MAX_STACK_SIZE 32
 #define MAX_DEPTH 51
 #define EPSILON 0.001
 #define INFINITY_F 1.0e20
@@ -26,10 +29,13 @@ out vec4 frag_color;
 #define METAL 1
 #define DIELECTRIC 2
 
+#define HITTABLE_SPHERE 0
+#define HITTABLE_BVH_NODE 1
+
 // Use vec4 arrays for uniform blocks as required by sokol
 layout(binding=0) uniform fs_params {
     vec4 u_params;              // x: samples_per_pixel, y: max_depth, z: aspect_ratio, w: vfov
-    vec4 u_camera_params;       // x: defocus_angle, y: focus_dist, z: sphere_count, w: unused
+    vec4 u_camera_params;       // x: defocus_angle, y: focus_dist, z: sphere_count, w: bvh_node_count
     vec4 u_lookfrom;            // xyz: lookfrom, w: unused
     vec4 u_lookat;              // xyz: lookat, w: unused
     vec4 u_vup;                 // xyz: vup, w: unused
@@ -39,6 +45,10 @@ layout(binding=0) uniform fs_params {
     vec4 u_sphere_data_1[MAX_SPHERES]; // center(xyz), radius(w)
     vec4 u_sphere_data_2[MAX_SPHERES]; // material_type(x), albedo(yzw)
     vec4 u_sphere_data_3[MAX_SPHERES]; // metal_fuzz(x), refraction_index(y), unused(zw)
+    
+    vec4 u_bvh_data_1[MAX_BVH_NODES]; // bbox_min(xyz), left_index(w)
+    vec4 u_bvh_data_2[MAX_BVH_NODES]; // bbox_max(xyz), right_index(w)
+    vec4 u_bvh_data_3[MAX_BVH_NODES]; // hittable_type(x), hittable_type(y), unused(zw)
 };
 
 // Camera variables
@@ -59,6 +69,11 @@ struct Ray {
     vec3 direction;
 };
 
+struct AABB {
+  vec3 aabb_min;
+  vec3 aabb_max;
+};
+
 // Hit record structure
 struct HitRecord {
     vec3 p;
@@ -69,6 +84,12 @@ struct HitRecord {
     vec3 albedo;
     float metal_fuzz; // Changed from "fuzz" to "metal_fuzz" to be consistent
     float refraction_index;
+};
+
+struct StackEntry {
+  int node_index;
+  float t_min;
+  float t_max;
 };
 
 // Material handling
@@ -230,6 +251,30 @@ void set_face_normal(inout HitRecord rec, Ray r, vec3 outward_normal) {
     rec.normal = rec.front_face ? outward_normal : -outward_normal;
 }
 
+bool hit_aabb(Ray r, AABB bbox, float t_min, float t_max) {
+      for (int i = 0; i < 3; i++) {
+        float invD = 1.0 / r.direction[i];
+        float orig = r.origin[i];
+        
+        float t0 = (bbox.aabb_min[i] - orig) * invD;
+        float t1 = (bbox.aabb_max[i] - orig) * invD;
+        
+        if (invD < 0.0) {
+            float temp = t0;
+            t0 = t1;
+            t1 = temp;
+        }
+        
+        t_min = max(t0, t_min);
+        t_max = min(t1, t_max);
+        
+        if (t_max <= t_min) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Check if ray hits a sphere
 bool hit_sphere(Ray r, float t_min, float t_max, int sphere_index, inout HitRecord rec) {
     vec3 center = u_sphere_data_1[sphere_index].xyz;
@@ -278,32 +323,118 @@ bool hit_sphere(Ray r, float t_min, float t_max, int sphere_index, inout HitReco
     return true;
 }
 
-// Check if ray hits any object in the world
-bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec) {
+bool hit_world_bvh(Ray r, float t_min, float t_max, inout HitRecord rec) {
     bool hit_anything = false;
     float closest_so_far = t_max;
-    int sphere_count = int(u_camera_params.z);
     
-    // First few rays, we'll debug by forcing a hit on any sphere as a test
-    // Uncomment for debugging
-    // if (gl_FragCoord.x < 10.0 && gl_FragCoord.y < 10.0) {
-    //     vec3 dir = normalize(r.direction);
-    //     // frag_color = vec4(abs(dir), 1.0); // Visualize ray direction
-    //     // return true; // Force a hit for testing
-    // }
+    int bvh_node_count = int(u_camera_params.w);
+    if (bvh_node_count == 0) {
+        // Fallback to linear search if no BVH
+        int sphere_count = int(u_camera_params.z);
+        for (int i = 0; i < MAX_SPHERES; i++) {
+            if (i >= sphere_count) break;
+            
+            HitRecord temp_rec;
+            if (hit_sphere(r, t_min, closest_so_far, i, temp_rec)) {
+                hit_anything = true;
+                closest_so_far = temp_rec.t;
+                rec = temp_rec;
+            }
+        }
+        return hit_anything;
+    }
     
-    for (int i = 0; i < MAX_SPHERES; i++) {
-        if (i >= sphere_count) break;
+    // Stack-based BVH traversal
+    StackEntry stack[MAX_STACK_SIZE];
+    int stack_ptr = 0;
+    
+    // Start with root node
+    stack[stack_ptr].node_index = 0;
+    stack[stack_ptr].t_min = t_min;
+    stack[stack_ptr].t_max = closest_so_far;
+    stack_ptr++;
+    
+    while (stack_ptr > 0 && stack_ptr < MAX_STACK_SIZE) {
+        stack_ptr--;
+        StackEntry entry = stack[stack_ptr];
+        int node_idx = entry.node_index;
         
-        HitRecord temp_rec;
-        if (hit_sphere(r, t_min, closest_so_far, i, temp_rec)) {
-            hit_anything = true;
-            closest_so_far = temp_rec.t;
-            rec = temp_rec;
+        if (node_idx < 0 || node_idx >= bvh_node_count || node_idx >= MAX_BVH_NODES) continue;
+        
+        // Get node data
+        vec3 bbox_min = u_bvh_data_1[node_idx].xyz;
+        vec3 bbox_max = u_bvh_data_2[node_idx].xyz;
+        int left_index = int(u_bvh_data_1[node_idx].w);
+        int right_index = int(u_bvh_data_2[node_idx].w);
+        int hittable_type = int(u_bvh_data_3[node_idx].x);
+        int hittable_index = int(u_bvh_data_3[node_idx].y);
+        
+        // Check if ray hits this node's bounding box
+        AABB node_bbox;
+        node_bbox.aabb_min = bbox_min;
+        node_bbox.aabb_max = bbox_max;
+        
+        if (!hit_aabb(r, node_bbox, entry.t_min, min(entry.t_max, closest_so_far))) {
+            continue;
+        }
+        
+        // If this is a leaf node (contains a sphere)
+        if (hittable_type == HITTABLE_SPHERE) {
+            HitRecord temp_rec;
+            if (hit_sphere(r, entry.t_min, closest_so_far, hittable_index, temp_rec)) {
+                hit_anything = true;
+                closest_so_far = temp_rec.t;
+                rec = temp_rec;
+            }
+        }
+        // If this is an internal BVH node
+        else if (hittable_type == HITTABLE_BVH_NODE) {
+            // Add children to stack
+            if (stack_ptr < MAX_STACK_SIZE - 2) {
+                if (left_index >= 0 && left_index < bvh_node_count) {
+                    stack[stack_ptr].node_index = left_index;
+                    stack[stack_ptr].t_min = entry.t_min;
+                    stack[stack_ptr].t_max = closest_so_far;
+                    stack_ptr++;
+                }
+                
+                if (right_index >= 0 && right_index < bvh_node_count) {
+                    stack[stack_ptr].node_index = right_index;
+                    stack[stack_ptr].t_min = entry.t_min;
+                    stack[stack_ptr].t_max = closest_so_far;
+                    stack_ptr++;
+                }
+            }
         }
     }
     
     return hit_anything;
+}
+
+// Check if ray hits any object in the world
+bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec) {
+    int bvh_node_count = int(u_camera_params.w);
+
+    int sphere_count = int(u_camera_params.z);
+    if (bvh_node_count == 0) {
+        bool hit_anything = false;
+        float closest_so_far = t_max;
+    //int sphere_count = int(u_camera_params.z);
+            for (int i = 0; i < MAX_SPHERES; i++) {
+                if (i >= sphere_count) break;
+        
+                HitRecord temp_rec;
+                if (hit_sphere(r, t_min, closest_so_far, i, temp_rec)) {
+                    hit_anything = true;
+                    closest_so_far = temp_rec.t;
+                    rec = temp_rec;
+                }
+            }
+    
+        return hit_anything;
+    }
+    
+    return hit_world_bvh(r, t_min, t_max, rec);
 }
 
 // Lambertian material scatter function

@@ -15,7 +15,16 @@ const HittableType = @import("bvh.zig").HittableType;
 
 // Constants
 const MAX_SPHERES = 500;
-//const MAX_BVH_NODES = 1000;
+const MAX_BVH_NODES = 1000;
+
+const BVHNodeData = struct {
+    bbox_min: @Vector(3, f32),
+    bbox_max: @Vector(3, f32),
+    left_index: i32,
+    right_index: i32,
+    hittable_type: i32, // 0 = sphere, 1 = bvh_node
+    hittable_index: i32, // For leaf nodes, index into sphere array
+};
 
 // Struct to hold the scene configuration
 pub const SceneConfig = struct {
@@ -35,8 +44,9 @@ pub const SceneConfig = struct {
     spheres: []const Sphere,
 
     // BVH data
-    //bvh_node_count: i32,
-    //bvh_root: ?*BVHNode,
+    bvh_node_count: i32,
+    bvh_nodes: []BVHNodeData,
+    bvh_root: ?*Hittable,
 };
 
 // Helper function to set up sphere data in the expected vec4 format
@@ -97,49 +107,50 @@ fn setupSphereData(scene: SceneConfig, params: *shd.FsParams) void {
 }
 
 // Initialize BVH data arrays
-//fn initBvhNodeData(params: *shd.FsParams) void {
-//    for (0..MAX_BVH_NODES) |i| {
-//        params.u_bvh_nodes_min[i] = .{ 0.0, 0.0, 0.0, 0.0 }; // min bounds (xyz), left_index (w)
-//        params.u_bvh_nodes_max[i] = .{ 0.0, 0.0, 0.0, 0.0 }; // max bounds (xyz), right_index (w)
-//        params.u_bvh_nodes_info[i] = .{ 0.0, 0.0, 0.0, 0.0 }; // item_index (x), is_leaf (y), unused (zw)
-//    }
-//}
+fn initBvhNodeData(params: *shd.FsParams) void {
+    for (0..MAX_BVH_NODES) |i| {
+        params.u_bvh_data_1[i] = .{ 0.0, 0.0, 0.0, -1.0 }; // bbox_min.xyz, left_index (w)
+        params.u_bvh_data_2[i] = .{ 0.0, 0.0, 0.0, -1.0 }; // bbox_max.xyz, right_index (w)
+        params.u_bvh_data_3[i] = .{ 0.0, -1.0, 0.0, 0.0 }; // hittable_type, hittable_index, unused
+    }
+}
 
 // Helper function to set up BVH node data
-//fn setupBvhData(scene: SceneConfig, params: *shd.FsParams) void {
-// Initialize with default values
-//    initBvhNodeData(params);
+fn setupBvhData(scene: SceneConfig, params: *shd.FsParams) void {
+    // Initialize with default values
+    initBvhNodeData(params);
 
-// Return early if no BVH data is available
-//    if (scene.bvh_root == null or scene.bvh_node_count == 0) {
-//        return;
-//    }
+    // Return early if no BVH data is available
+    if (scene.bvh_nodes.len == 0) {
+        return;
+    }
 
-// Get the root node and set its data
-//    const root = scene.bvh_root.?;
+    // Maximum number of BVH nodes we can handle
+    const max_nodes = @min(scene.bvh_nodes.len, MAX_BVH_NODES);
 
-// Maximum number of BVH nodes we can handle
-//    const max_nodes = @min(scene.bvh_node_count, MAX_BVH_NODES);
+    // Copy BVH node data to shader parameters
+    for (scene.bvh_nodes[0..max_nodes], 0..) |node, i| {
+        // Bounding box min and left child index
+        params.u_bvh_data_1[i][0] = node.bbox_min[0];
+        params.u_bvh_data_1[i][1] = node.bbox_min[1];
+        params.u_bvh_data_1[i][2] = node.bbox_min[2];
+        params.u_bvh_data_1[i][3] = @floatFromInt(node.left_index);
 
-// Basic implementation - just set the root node data
-//    const box = root.bbox;
-//    params.u_bvh_nodes_min[0][0] = box.x.min;
-//    params.u_bvh_nodes_min[0][1] = box.y.min;
-//    params.u_bvh_nodes_min[0][2] = box.z.min;
+        // Bounding box max and right child index
+        params.u_bvh_data_2[i][0] = node.bbox_max[0];
+        params.u_bvh_data_2[i][1] = node.bbox_max[1];
+        params.u_bvh_data_2[i][2] = node.bbox_max[2];
+        params.u_bvh_data_2[i][3] = @floatFromInt(node.right_index);
 
-//    params.u_bvh_nodes_max[0][0] = box.x.max;
-//    params.u_bvh_nodes_max[0][1] = box.y.max;
-//    params.u_bvh_nodes_max[0][2] = box.z.max;
+        // Hittable type and index
+        params.u_bvh_data_3[i][0] = @floatFromInt(node.hittable_type);
+        params.u_bvh_data_3[i][1] = @floatFromInt(node.hittable_index);
+        params.u_bvh_data_3[i][2] = 0.0; // unused
+        params.u_bvh_data_3[i][3] = 0.0; // unused
+    }
 
-// Set is_leaf flag (not a leaf if left and right are different)
-//    const is_leaf = (root.left == root.right);
-
-//    params.u_bvh_nodes_info[0][1] = if (is_leaf) 1.0 else 0.0;
-
-// For a complete implementation, we'd traverse the BVH tree here
-// But for now, we'll just indicate that BVH is available by setting node count
-//    std.debug.print("Set up BVH root node (max nodes: {d})\n", .{max_nodes});
-//}
+    std.debug.print("Set up {} BVH nodes for GPU\n", .{max_nodes});
+}
 
 // Setup function to create the shader parameters
 pub fn setupShaderParams(scene: SceneConfig) shd.FsParams {
@@ -161,8 +172,8 @@ pub fn setupShaderParams(scene: SceneConfig) shd.FsParams {
         scene.defocus_angle, // x: defocus_angle
         scene.focus_dist, // y: focus_dist
         @floatFromInt(scene.sphere_count), // z: sphere_count
-        //@floatFromInt(scene.bvh_node_count), // w: bvh_node_count
-        0.0, //unused
+        @floatFromInt(scene.bvh_node_count), // w: bvh_node_count
+        //0.0, //unused
     };
 
     // Camera position and orientation
@@ -191,17 +202,78 @@ pub fn setupShaderParams(scene: SceneConfig) shd.FsParams {
     setupSphereData(scene, &params);
 
     // Set up BVH data
-    //setupBvhData(scene, &params);
+    setupBvhData(scene, &params);
 
     return params;
 }
 
-// Count BVH nodes (simplified version)
-//fn countBvhNodes(_: *BVHNode) i32 {
-// For now, just return a count of 1 to indicate BVH is present
-// A full implementation would traverse the tree
-//    return 1;
-//}
+// Recursively serialize BVH tree into a flat array
+fn serializeBvhNode(
+    allocator: std.mem.Allocator,
+    hittable: *Hittable,
+    nodes: *std.ArrayList(BVHNodeData),
+    sphere_map: std.AutoHashMap(*const Sphere, usize),
+) !i32 {
+    const node_index = @as(i32, @intCast(nodes.items.len));
+
+    switch (hittable.*) {
+        .sphere => |*sphere| {
+            // Leaf node containing a sphere
+            const bbox = sphere.boundingBox();
+            const sphere_index = sphere_map.get(sphere) orelse {
+                std.debug.print("Warning: sphere not found in map\n", .{});
+                return -1;
+            };
+
+            try nodes.append(.{
+                .bbox_min = .{ bbox.x.min, bbox.y.min, bbox.z.min },
+                .bbox_max = .{ bbox.x.max, bbox.y.max, bbox.z.max },
+                .left_index = -1,
+                .right_index = -1,
+                .hittable_type = 0, // HITTABLE_SPHERE
+                .hittable_index = @intCast(sphere_index),
+            });
+        },
+        .bvh_node => |bvh| {
+            // Internal BVH node
+            const bbox = bvh.bbox;
+
+            // Reserve space for this node
+            try nodes.append(.{
+                .bbox_min = .{ bbox.x.min, bbox.y.min, bbox.z.min },
+                .bbox_max = .{ bbox.x.max, bbox.y.max, bbox.z.max },
+                .left_index = -1, // Will be filled in
+                .right_index = -1, // Will be filled in
+                .hittable_type = 1, // HITTABLE_BVH_NODE
+                .hittable_index = -1,
+            });
+
+            // Recursively serialize children
+            const left_index = try serializeBvhNode(allocator, bvh.left, nodes, sphere_map);
+            const right_index = try serializeBvhNode(allocator, bvh.right, nodes, sphere_map);
+
+            // Update the node with child indices
+            nodes.items[@intCast(node_index)].left_index = left_index;
+            nodes.items[@intCast(node_index)].right_index = right_index;
+        },
+    }
+
+    return node_index;
+}
+
+fn collectSpheresFromBVH(hittable: *Hittable, spheres: *std.ArrayList(*const Sphere)) !void {
+    switch (hittable.*) {
+        .sphere => |*sphere| {
+            try spheres.append(sphere);
+        },
+        .bvh_node => |bvh| {
+            try collectSpheresFromBVH(bvh.left, spheres);
+            if (bvh.left != bvh.right) {
+                try collectSpheresFromBVH(bvh.right, spheres);
+            }
+        },
+    }
+}
 
 // Creates a scene configuration from a hittable list
 pub fn createSceneFromHittableList(
@@ -231,33 +303,57 @@ pub fn createSceneFromHittableList(
         .vup = camera_config.vup,
         .sphere_count = 0,
         .spheres = &[_]Sphere{},
-        //.bvh_node_count = 0,
-        //.bvh_root = null,
+        .bvh_node_count = 0,
+        .bvh_nodes = &[_]BVHNodeData{},
+        .bvh_root = null,
     };
 
-    // Extract spheres from the world
-    var spheres = std.ArrayList(Sphere).init(allocator);
-    defer spheres.deinit();
+    // Use the original world objects as our sphere list
+    scene.sphere_count = @intCast(world.objects.items.len);
+    scene.spheres = try allocator.dupe(Sphere, world.objects.items);
 
-    // Iterate through world objects (these are already spheres)
-    for (world.objects.items) |sphere| {
-        try spheres.append(sphere);
+    std.debug.print("Scene has {} spheres from world objects\n", .{scene.sphere_count});
+
+    // Extract and serialize BVH data if available
+    if (world.bvh_root) |bvh_root| {
+        scene.bvh_root = bvh_root;
+
+        // Create a map from sphere pointers in BVH to indices in our sphere array
+        var sphere_map = std.AutoHashMap(*const Sphere, usize).init(allocator);
+        defer sphere_map.deinit();
+
+        // Collect all sphere pointers from the BVH
+        var sphere_ptrs = std.ArrayList(*const Sphere).init(allocator);
+        defer sphere_ptrs.deinit();
+        try collectSpheresFromBVH(bvh_root, &sphere_ptrs);
+
+        std.debug.print("BVH contains {} sphere references\n", .{sphere_ptrs.items.len});
+
+        // Map BVH sphere pointers to indices in world.objects
+        for (sphere_ptrs.items) |bvh_sphere_ptr| {
+            // Find matching sphere in world objects by comparing values
+            for (world.objects.items, 0..) |world_sphere, idx| {
+                // Compare by position and radius (should be unique enough)
+                if (@reduce(.And, bvh_sphere_ptr.center == world_sphere.center) and
+                    bvh_sphere_ptr.radius == world_sphere.radius)
+                {
+                    try sphere_map.put(bvh_sphere_ptr, idx);
+                    break;
+                }
+            }
+        }
+
+        // Serialize the BVH tree into a flat array
+        var bvh_nodes = std.ArrayList(BVHNodeData).init(allocator);
+        defer bvh_nodes.deinit();
+
+        _ = try serializeBvhNode(allocator, bvh_root, &bvh_nodes, sphere_map);
+
+        scene.bvh_node_count = @intCast(bvh_nodes.items.len);
+        scene.bvh_nodes = try allocator.dupe(BVHNodeData, bvh_nodes.items);
+
+        std.debug.print("BVH serialized: {} nodes for {} spheres\n", .{ scene.bvh_node_count, scene.sphere_count });
     }
-
-    // Set the sphere count and make a copy of the sphere data
-    scene.sphere_count = @intCast(spheres.items.len);
-    scene.spheres = try allocator.dupe(Sphere, spheres.items);
-
-    // Extract and set BVH data if available
-    //    if (world.bvh_root != null) {
-    // Check if the root is a BVH node type
-    //        if (@as(HittableType, world.bvh_root.?.*) == .bvh_node) {
-    //            const bvh_node = world.bvh_root.?.bvh_node;
-    //            scene.bvh_root = bvh_node;
-    //            scene.bvh_node_count = countBvhNodes(bvh_node);
-    //            std.debug.print("BVH available for rendering\n", .{});
-    //        }
-    //    }
 
     return scene;
 }

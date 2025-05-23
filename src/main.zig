@@ -165,30 +165,30 @@ fn setupScene() !void {
     _ = try world.add(Sphere.init(init(4, 1, 0), 1.0, material3));
 
     // Add some random smaller spheres
-    //var a: f32 = -11;
-    //while (a < 11) : (a += 1) { // Changed from 0 to 11 to match CPU version
-    //    var b: f32 = -11;
-    //    while (b < 11) : (b += 1) { // Changed from 0 to 11 to match CPU version
-    //        const choose_mat = rtw.random_double();
-    //        const center: @Vector(3, f32) = @Vector(3, f32){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
+    var a: f32 = -11;
+    while (a < 11) : (a += 1) { // Changed from 0 to 11 to match CPU version
+        var b: f32 = -11;
+        while (b < 11) : (b += 1) { // Changed from 0 to 11 to match CPU version
+            const choose_mat = rtw.random_double();
+            const center: @Vector(3, f32) = @Vector(3, f32){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
 
-    //        if (try rtw.vec.magnitude(center - init(4.0, 0.2, 0.0)) > 0.9) {
-    //            if (choose_mat < 0.8) {
-    //                const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
-    //                const sphere_material = Material.lambertian(albedo);
-    //                _ = try world.add(Sphere.init(center, 0.2, sphere_material));
-    //            } else if (choose_mat < 0.95) {
-    //                const albedo = rtw.vec.random_vec_range(0.5, 1.0);
-    //                const fuzz = rtw.random_double_range(0, 0.5);
-    //                const sphere_material = Material.metal(albedo, fuzz);
-    //                _ = try world.add(Sphere.init(center, 0.2, sphere_material));
-    //            } else {
-    //                const sphere_material = Material.dielectric(1.5);
-    //                _ = try world.add(Sphere.init(center, 0.2, sphere_material));
-    //            }
-    //        }
-    //    }
-    //}
+            if (try rtw.vec.magnitude(center - init(4.0, 0.2, 0.0)) > 0.9) {
+                if (choose_mat < 0.8) {
+                    const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
+                    const sphere_material = Material.lambertian(albedo);
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
+                } else if (choose_mat < 0.95) {
+                    const albedo = rtw.vec.random_vec_range(0.5, 1.0);
+                    const fuzz = rtw.random_double_range(0, 0.5);
+                    const sphere_material = Material.metal(albedo, fuzz);
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
+                } else {
+                    const sphere_material = Material.dielectric(1.5);
+                    _ = try world.add(Sphere.init(center, 0.2, sphere_material));
+                }
+            }
+        }
+    }
 
     try world.buildBVH();
 
@@ -197,8 +197,8 @@ fn setupScene() !void {
         state.allocator,
         &world,
         .{
-            .samples_per_pixel = 50, // Start with a low sample count for interactive preview
-            .max_depth = 5,
+            .samples_per_pixel = 100, // Start with a low sample count for interactive preview
+            .max_depth = 20,
             .aspect_ratio = sapp.widthf() / sapp.heightf(),
             .vfov = 20.0, // Wider field of view
             .defocus_angle = 0.6, // No depth of field blur
@@ -228,9 +228,10 @@ export fn frame() void {
 export fn cleanup() void {
 
     //TODO:  state.allocator.free(state.scene.sphere) works in ReleaseFast, but segfaults in debug mode?
-    if (state.scene.spheres.len > 0) {
-        state.allocator.free(state.scene.spheres);
-    }
+
+    //if (state.scene.spheres.len > 0) {
+    //    state.allocator.free(state.scene.spheres);
+    //}
 
     sg.shutdown();
 }
