@@ -1,9 +1,5 @@
-const std = @import("std");
 const Interval = @import("interval.zig").Interval;
 const Ray = @import("ray.zig").Ray;
-const vec = @import("vec.zig");
-//const Vec3 = @import("vec.zig").Vec3;
-//const Point3 = @import("vec.zig").Point3;
 
 pub const AABB = struct {
     x: Interval,
@@ -61,7 +57,7 @@ pub const AABB = struct {
 
         // Loop over the three dimensions for x=0, y=1, z=2
         inline for (0..3) |dim| {
-            const invD = 1.0 / r.direction[dim];
+            const invD = r.inv_direction[dim];
             const orig = r.origin[dim];
             const interval = switch (dim) {
                 0 => self.x,

@@ -6,8 +6,6 @@ const hit_record = @import("hittable.zig").hit_record;
 const AABB = @import("aabb.zig").AABB;
 const Sphere = @import("sphere.zig").sphere;
 const vec = @import("vec.zig");
-//const Vec3 = @import("vec.zig").Vec3;
-//const Point3 = @import("vec.zig").Point3;
 
 pub const BVHNode = struct {
     left: *Hittable,
@@ -21,23 +19,15 @@ pub const BVHNode = struct {
         return try initFromSpan(allocator, objects, 0, objects.len);
     }
 
-    // Construct a BVH node from a span of objects
     pub fn initFromSpan(allocator: std.mem.Allocator, objects: []Sphere, start: usize, end: usize) !*BVHNode {
         var node = try allocator.create(BVHNode);
-
-        // Choose a random axis to sort on (0, 1, or 2 for x, y, or z)
-        const rand = std.crypto.random;
-        const axis = rand.intRangeAtMost(u8, 0, 2);
-
+        const axis = @as(u8, @intCast(rtw.random_int(0, 2)));
         const object_span = end - start;
 
         if (object_span == 1) {
-            // Only one object, create leaf node with the same object for both children
-            // In a more optimized version, we would have a specific leaf type
             node.left = try createHittableFromSphere(allocator, objects[start]);
             node.right = node.left;
         } else if (object_span == 2) {
-            // Two objects - sort them and create a child for each
             if (boxCompare(objects[start], objects[start + 1], axis)) {
                 node.left = try createHittableFromSphere(allocator, objects[start]);
                 node.right = try createHittableFromSphere(allocator, objects[start + 1]);
@@ -46,26 +36,16 @@ pub const BVHNode = struct {
                 node.right = try createHittableFromSphere(allocator, objects[start]);
             }
         } else {
-            // More than two objects - sort and divide
-            // TODO: Use Zig's sort with a custom comparator
-            const objectsCopy = try allocator.alloc(Sphere, object_span);
-            defer allocator.free(objectsCopy);
-            for (objects[start..end], 0..) |obj, i| {
-                objectsCopy[i] = obj;
-            }
+            // Sort the sub-slice in place — no copy needed.
+            sortSpheresByAxis(objects[start..end], axis);
 
-            // Sort by selected axis
-            sortSpheresByAxis(objectsCopy, axis);
-
-            // Find the mid point
             const mid = start + object_span / 2;
 
-            // Recursively build left and right branches
+            // Recurse on the now-sorted sub-slices.
             node.left = try Hittable.createFromBVH(allocator, try initFromSpan(allocator, objects, start, mid));
             node.right = try Hittable.createFromBVH(allocator, try initFromSpan(allocator, objects, mid, end));
         }
 
-        // Calculate the bounding box for this node
         const box_left = getBoxForHittable(node.left);
         const box_right = getBoxForHittable(node.right);
         node.bbox = AABB.merge(box_left, box_right);
@@ -129,6 +109,8 @@ fn sortSpheresByAxis(objects: []Sphere, axis: u8) void {
     };
 
     std.sort.insertion(Sphere, objects, Context{ .axis = axis }, Context.lessThan);
+
+    //std.sort.pdq(Sphere, objects, Context{ .axis = axis }, Context.lessThan);
 }
 
 // Helper function to get the bounding box for a sphere
@@ -136,10 +118,6 @@ fn getSphereBox(sphere: Sphere) AABB {
     const radius_vec = @Vector(3, f32){ sphere.radius, sphere.radius, sphere.radius };
     const min_vec = sphere.center - radius_vec;
     const max_vec = sphere.center + radius_vec;
-
-    //const min_point = Point3.initFromVector(min_vec);
-    //const max_point = Point3.initFromVector(max_vec);
-
     const min_point = min_vec;
     const max_point = max_vec;
     return AABB.fromPoints(min_point, max_point);

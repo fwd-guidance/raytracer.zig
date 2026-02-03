@@ -15,16 +15,16 @@
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
-    .dependencies = .{
-        .wgpu_native_zig = .{
-            .url = "https://github.com/bronter/wgpu_native_zig/archive/refs/tags/v4.0.0.tar.gz",
-            .hash = "wgpu_native_zig-4.0.0-B9jeDOSZAgA1TqZrr-swvZf9kyAssF0FsEmrQkF0A495",
-        },
-        .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#01bde5a6cf5d934948a1c6e60483e4ab75524891",
-            .hash = "sokol-0.1.0-pb1HK2CJLADmYmRGXRmmpsf17gPLJ0MLAT06psMvPK5f",
-        },
-    },
+    //    .dependencies = .{
+    //        .wgpu_native_zig = .{
+    //            .url = "https://github.com/bronter/wgpu_native_zig/archive/refs/tags/v4.0.0.tar.gz",
+    //            .hash = "wgpu_native_zig-4.0.0-B9jeDOSZAgA1TqZrr-swvZf9kyAssF0FsEmrQkF0A495",
+    //        },
+    //        .sokol = .{
+    //            .url = "git+https://github.com/floooh/sokol-zig.git#01bde5a6cf5d934948a1c6e60483e4ab75524891",
+    //            .hash = "sokol-0.1.0-pb1HK2CJLADmYmRGXRmmpsf17gPLJ0MLAT06psMvPK5f",
+    //        },
+    //    },
     .paths = .{
         // This makes *all* files, recursively, included in this package. It is generally
         // better to explicitly list the files and directories instead, to insure that
