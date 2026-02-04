@@ -4,7 +4,7 @@ const Interval = rtw.interval.Interval;
 const std = rtw.std;
 const Ray = rtw.ray.Ray;
 const hit_record = rtw.hittable.hit_record;
-const Sphere = rtw.sphere.sphere;
+const Sphere = rtw.sphere.Sphere;
 const Material = rtw.material.Material;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
@@ -17,6 +17,7 @@ pub const HittableList = struct {
     objects: MultiArrayList(Sphere),
     materials: ArrayList(Material),
     bvh_root: ?*Hittable, // Optional BVH root node
+    bbox: AABB,
     allocator: std.mem.Allocator,
 
     const Self = @This();
@@ -26,6 +27,7 @@ pub const HittableList = struct {
             .objects = MultiArrayList(Sphere){},
             .materials = ArrayList(Material){},
             .bvh_root = null,
+            .bbox = AABB.empty(),
             .allocator = allocator,
         };
     }
@@ -48,6 +50,9 @@ pub const HittableList = struct {
 
     pub fn add(self: *Self, _sphere: Sphere) anyerror!*Self {
         try self.*.objects.append(self.allocator, _sphere);
+
+        self.bbox = AABB.merge(self.bbox, _sphere.boundingBox());
+
         // Clear BVH since we've modified the object list
         if (self.bvh_root != null) {
             self.bvh_root.?.deinit(self.allocator);
@@ -98,15 +103,19 @@ pub const HittableList = struct {
         // 1. Get slices for the specific fields we need for intersection
         const centers = self.objects.items(.center);
         const radii = self.objects.items(.radius);
+        const inv_radii = self.objects.items(.inv_radius);
         const mat_ids = self.objects.items(.mat_id);
 
         // 2. Iterate by index
         for (0..self.objects.len) |i| {
             const center = centers[i];
             const radius = radii[i];
+            const inv_radius = inv_radii[i];
 
             // Perform Intersection Check (Inlined for speed)
-            const oc = center - r.origin;
+            const current_center = center.position(r.tm);
+            //const oc = center - r.origin;
+            const oc = current_center - r.origin;
             const a = vec.square_magnitude(r.direction);
             const h = vec.dot(r.direction, oc);
             const c = vec.square_magnitude(oc) - radius * radius;
@@ -131,7 +140,9 @@ pub const HittableList = struct {
 
             rec.t = root;
             rec.p = r.position(root);
-            const outward_normal = (rec.p - center) * @as(@Vector(3, f32), @splat(radius));
+            //const outward_normal = (rec.p - center) * @as(@Vector(3, f32), @splat(radius));
+
+            const outward_normal = (rec.p - current_center) * @as(@Vector(3, f32), @splat(inv_radius));
             rec.set_face_normal(&r, &outward_normal);
 
             // Only access the material ID array when we actually hit something
@@ -142,8 +153,7 @@ pub const HittableList = struct {
     }
 
     pub fn boundingBox(self: Self) AABB {
-        //if (self.objects.items.len == 0) {
-        if (self.object.len == 0) {
+        if (self.objects.len == 0) {
             return AABB.empty();
         }
 

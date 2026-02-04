@@ -4,7 +4,7 @@ const Interval = @import("interval.zig").Interval;
 const Ray = @import("ray.zig").Ray;
 const hit_record = @import("hittable.zig").hit_record;
 const AABB = @import("aabb.zig").AABB;
-const Sphere = @import("sphere.zig").sphere;
+const Sphere = @import("sphere.zig").Sphere;
 const vec = @import("vec.zig");
 
 pub const BVHNode = struct {
@@ -21,7 +21,14 @@ pub const BVHNode = struct {
 
     pub fn initFromSpan(allocator: std.mem.Allocator, objects: []Sphere, start: usize, end: usize) !*BVHNode {
         var node = try allocator.create(BVHNode);
-        const axis = @as(u8, @intCast(rtw.random_int(0, 2)));
+        //const axis = @as(u8, @intCast(rtw.random_int(0, 2)));
+
+        var span_bbox = AABB.empty();
+        for (start..end) |i| {
+            span_bbox = AABB.merge(span_bbox, objects[i].boundingBox());
+        }
+        const axis = span_bbox.longest_axis();
+
         const object_span = end - start;
 
         if (object_span == 1) {
@@ -115,12 +122,7 @@ fn sortSpheresByAxis(objects: []Sphere, axis: u8) void {
 
 // Helper function to get the bounding box for a sphere
 fn getSphereBox(sphere: Sphere) AABB {
-    const radius_vec = @Vector(3, f32){ sphere.radius, sphere.radius, sphere.radius };
-    const min_vec = sphere.center - radius_vec;
-    const max_vec = sphere.center + radius_vec;
-    const min_point = min_vec;
-    const max_point = max_vec;
-    return AABB.fromPoints(min_point, max_point);
+    return sphere.boundingBox();
 }
 
 // Helper to get the bounding box for a hittable

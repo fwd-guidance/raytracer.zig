@@ -1,7 +1,7 @@
 const rtw = @import("rtweekend.zig");
 const std = rtw.std;
 
-const Sphere = rtw.sphere.sphere;
+const Sphere = rtw.sphere.Sphere;
 const HittableList = rtw.HittableList.HittableList;
 const Camera = rtw.camera.Camera;
 const Material = rtw.material.Material;
@@ -38,29 +38,30 @@ pub fn draw_ppm() !void {
             const center: @Vector(3, f32) = @Vector(3, f32){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
             if (rtw.vec.magnitude(center - @Vector(3, f32){ 4.0, 0.2, 0.0 }) > 0.9) {
                 if (choose_mat < 0.8) {
+                    //const center_two = center + init(0, rtw.random_double_range(0, 0.5), 0);
                     const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
                     const sphere_material = Material.lambertian(albedo);
                     const sphere_material_id = try world.add_material(sphere_material);
-                    _ = try world.add(Sphere.init(center, 0.2, sphere_material_id));
+                    _ = try world.add(Sphere.init(center, null, 0.2, sphere_material_id));
                 } else if (choose_mat < 0.95) {
                     const albedo = rtw.vec.random_vec_range(0.5, 1.0);
                     const fuzz = rtw.random_double_range(0, 0.5);
                     const sphere_material = Material.metal(albedo, fuzz);
                     const sphere_material_id = try world.add_material(sphere_material);
-                    _ = try world.add(Sphere.init(center, 0.2, sphere_material_id));
+                    _ = try world.add(Sphere.init(center, null, 0.2, sphere_material_id));
                 } else {
                     const sphere_material = Material.dielectric(1.5);
                     const sphere_material_id = try world.add_material(sphere_material);
-                    _ = try world.add(Sphere.init(center, 0.2, sphere_material_id));
+                    _ = try world.add(Sphere.init(center, null, 0.2, sphere_material_id));
                 }
             }
         }
     }
 
-    _ = try world.add(Sphere.init(init(0, 1, 0), 1.0, material1_id));
-    _ = try world.add(Sphere.init(init(-4, 1, 0), 1.0, material2_id));
-    _ = try world.add(Sphere.init(init(4, 1, 0), 1.0, material3_id));
-    _ = try world.add(Sphere.init(init(0.0, -1000, 0), 1000, ground_id));
+    _ = try world.add(Sphere.init(init(0, 1, 0), null, 1.0, material1_id));
+    _ = try world.add(Sphere.init(init(-4, 1, 0), null, 1.0, material2_id));
+    _ = try world.add(Sphere.init(init(4, 1, 0), null, 1.0, material3_id));
+    _ = try world.add(Sphere.init(init(0.0, -1000, 0), null, 1000, ground_id));
 
     try world.buildBVH();
 

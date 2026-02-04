@@ -28,6 +28,18 @@ pub const AABB = struct {
         };
     }
 
+    pub fn longest_axis(self: AABB) u8 {
+        const x_size = self.x.size();
+        const y_size = self.y.size();
+        const z_size = self.z.size();
+
+        if (x_size > y_size) {
+            return if (x_size > z_size) 0 else 2;
+        } else {
+            return if (y_size > z_size) 1 else 2;
+        }
+    }
+
     pub fn pad(self: AABB) AABB {
         // Return a new bounding box that is slightly larger than the original
         const delta = 0.0001;
