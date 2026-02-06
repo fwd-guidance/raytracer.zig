@@ -1,5 +1,6 @@
 const rtw = @import("rtweekend.zig");
 
+const Texture = @import("texture.zig");
 const Ray = rtw.Ray;
 const hit_record = rtw.hit_record;
 
@@ -8,8 +9,8 @@ pub const Material = union(enum) {
     Metal: Metal,
     Dielectric: Dielectric,
 
-    pub fn lambertian(albedo: @Vector(3, f32)) Material {
-        return Material{ .Lambertian = Lambertian{ .albedo = albedo } };
+    pub fn lambertian(tex_id: usize) Material {
+        return Material{ .Lambertian = Lambertian{ .tex_id = tex_id } };
     }
 
     pub fn metal(albedo: @Vector(3, f32), fuzz: f32) Material {
@@ -22,13 +23,16 @@ pub const Material = union(enum) {
 };
 
 pub const Lambertian = struct {
-    albedo: @Vector(3, f32),
+    tex_id: usize,
     const Self = @This();
 
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
+        _ = self;
         const scatter_direction: @Vector(3, f32) = rec.*.normal + rtw.vec.random_unit_vector();
         scattered.* = Ray.init(rec.*.p, scatter_direction, r_in.*.tm);
-        attenuation.* = self.albedo;
+
+        // TODO: look into fixing this. render is fine but its jank. section 4.2 book 2.
+        attenuation.* = @Vector(3, f32){ 1.0, 1.0, 1.0 }; //self.value(rec.*.u, rec.*.v, rec.*.p);
         return true;
     }
 };

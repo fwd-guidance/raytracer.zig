@@ -14,6 +14,13 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .target = target, .optimize = optimize }),
     });
 
+    exe.addCSourceFile(.{
+        .file = b.path("src/include.c"),
+        .flags = &[_][]const u8{"-std=c99"},
+    });
+
+    exe.addIncludePath(b.path("src/"));
+
     //exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
 
     // Add MacOS framework dependencies

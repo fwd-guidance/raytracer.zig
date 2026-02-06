@@ -219,7 +219,7 @@ pub const Camera = struct {
     /// Recursive ray colour.  Now fully error-free — all vec and material
     /// scatter calls are infallible.  Depth is an integer counter.
     fn ray_color(r: Ray, depth: u32, world: *const hittable_list) @Vector(3, f32) {
-        if (depth == 0) return init(0, 0, 0);
+        if (depth <= 0) return init(0, 0, 0);
 
         var rec: hit_record = undefined;
         const hit_result = world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec);
@@ -230,15 +230,25 @@ pub const Camera = struct {
 
             const mat = world.materials.items[rec.mat_id];
 
-            const is_scattered: bool = switch (mat) {
-                .Lambertian => |l| l.scatter(&r, &rec, &attenuation, &scattered),
-                .Metal => |m| m.scatter(&r, &rec, &attenuation, &scattered),
-                .Dielectric => |d| d.scatter(&r, &rec, &attenuation, &scattered),
-            };
-
-            if (is_scattered) {
-                return attenuation * ray_color(scattered, depth - 1, world);
+            switch (mat) {
+                .Lambertian => |l| {
+                    if (l.scatter(&r, &rec, &attenuation, &scattered)) {
+                        attenuation = world.textures.items[l.tex_id].value(rec.u, rec.v, rec.p);
+                        return attenuation * ray_color(scattered, depth - 1, world);
+                    }
+                },
+                .Metal => |m| {
+                    if (m.scatter(&r, &rec, &attenuation, &scattered)) {
+                        return attenuation * ray_color(scattered, depth - 1, world);
+                    }
+                },
+                .Dielectric => |d| {
+                    if (d.scatter(&r, &rec, &attenuation, &scattered)) {
+                        return attenuation * ray_color(scattered, depth - 1, world);
+                    }
+                },
             }
+
             return @Vector(3, f32){ 0.0, 0.0, 0.0 };
         }
 

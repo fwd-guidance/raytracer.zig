@@ -6,6 +6,8 @@ const Ray = rtw.ray.Ray;
 const hit_record = rtw.hittable.hit_record;
 const Sphere = rtw.sphere.Sphere;
 const Material = rtw.material.Material;
+const Texture = @import("texture.zig").Texture;
+const RTWImage = @import("rtw_stb_image.zig").RTWImage;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const AABB = @import("aabb.zig").AABB;
@@ -16,6 +18,8 @@ const vec = @import("vec.zig");
 pub const HittableList = struct {
     objects: MultiArrayList(Sphere),
     materials: ArrayList(Material),
+    textures: ArrayList(Texture),
+    images: ArrayList(RTWImage),
     bvh_root: ?*Hittable, // Optional BVH root node
     bbox: AABB,
     allocator: std.mem.Allocator,
@@ -26,6 +30,8 @@ pub const HittableList = struct {
         return Self{
             .objects = MultiArrayList(Sphere){},
             .materials = ArrayList(Material){},
+            .textures = ArrayList(Texture){},
+            .images = ArrayList(RTWImage){},
             .bvh_root = null,
             .bbox = AABB.empty(),
             .allocator = allocator,
@@ -41,6 +47,23 @@ pub const HittableList = struct {
 
         self.*.objects.deinit(self.allocator);
         self.materials.deinit(self.allocator);
+        self.textures.deinit(self.allocator);
+
+        for (self.images.items) |*img| {
+            img.deinit();
+        }
+
+        self.images.deinit(self.allocator);
+    }
+
+    pub fn add_image(self: *Self, img: RTWImage) !usize {
+        try self.images.append(self.allocator, img);
+        return self.images.items.len - 1;
+    }
+
+    pub fn add_texture(self: *Self, tex: Texture) !usize {
+        try self.textures.append(self.allocator, tex);
+        return self.textures.items.len - 1;
     }
 
     pub fn add_material(self: *Self, mat: Material) !usize {

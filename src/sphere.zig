@@ -87,9 +87,27 @@ pub const Sphere = struct {
         rec.*.p = r.position(root);
         const outward_normal: @Vector(3, f32) = (rec.*.p - current_center) * @as(@Vector(3, f32), @splat(self.inv_radius));
         rec.set_face_normal(r, &outward_normal);
+
+        get_sphere_uv(outward_normal, rec);
+
         rec.*.mat_id = self.mat_id;
 
         return true;
+    }
+
+    pub fn get_sphere_uv(p: @Vector(3, f32), rec: *hit_record) void {
+        // TODO: ideally this fn would be able to easily rotate an img by an arbitrary amount from the caller.
+        //      like, being able to view any part of the earthmap vs being forced to see the americas.
+        const theta = std.math.acos(-p[1]);
+        const phi = std.math.atan2(-p[2], p[0]) + std.math.pi;
+
+        rec.*.u = phi / (2 * std.math.pi);
+
+        // rotates the img 90 degrees, which in the earthmap example means that you will see the prime meridian and not the americas.
+        //rec.*.u += 0.25;
+        //if (rec.*.u > 1.0) rec.*.u -= 1.0;
+
+        rec.*.v = theta / std.math.pi;
     }
 
     pub fn boundingBox(self: Self) AABB {

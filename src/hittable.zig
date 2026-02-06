@@ -6,6 +6,8 @@ const vec = rtw.vec;
 pub const hit_record = struct {
     p: @Vector(3, f32),
     t: f32,
+    u: f32,
+    v: f32,
     mat_id: usize,
     normal: @Vector(3, f32),
     front_face: bool,
