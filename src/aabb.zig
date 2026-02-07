@@ -7,11 +7,12 @@ pub const AABB = struct {
     z: Interval,
 
     pub fn init(x: Interval, y: Interval, z: Interval) AABB {
-        return AABB{
-            .x = x,
-            .y = y,
-            .z = z,
-        };
+        return pad(AABB{ .x = x, .y = y, .z = z });
+        //return AABB{
+        //    .x = x,
+        //    .y = y,
+        //    .z = z,
+        //};
     }
 
     pub fn empty() AABB {
@@ -21,11 +22,13 @@ pub const AABB = struct {
 
     pub fn fromPoints(a: @Vector(3, f32), b: @Vector(3, f32)) AABB {
         // The bounding box containing both points
-        return AABB{
+        const aabb = AABB{
             .x = Interval.init(@min(a[0], b[0]), @max(a[0], b[0])),
             .y = Interval.init(@min(a[1], b[1]), @max(a[1], b[1])),
             .z = Interval.init(@min(a[2], b[2]), @max(a[2], b[2])),
         };
+
+        return pad(aabb);
     }
 
     pub fn longest_axis(self: AABB) u8 {

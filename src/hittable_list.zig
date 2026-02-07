@@ -5,6 +5,7 @@ const std = rtw.std;
 const Ray = rtw.ray.Ray;
 const hit_record = rtw.hittable.hit_record;
 const Sphere = rtw.sphere.Sphere;
+const Quad = @import("quad.zig").Quad;
 const Material = rtw.material.Material;
 const Texture = @import("texture.zig").Texture;
 const RTWImage = @import("rtw_stb_image.zig").RTWImage;
@@ -15,8 +16,28 @@ const BVHNode = @import("bvh.zig").BVHNode;
 const Hittable = @import("bvh.zig").Hittable;
 const vec = @import("vec.zig");
 
+pub const Primitive = union(enum) {
+    Sphere: Sphere,
+    Quad: Quad,
+
+    pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+        switch (self) {
+            .Sphere => |s| return s.hit(r, ray_t, rec),
+            .Quad => |q| return q.hit(r, ray_t, rec),
+        }
+    }
+
+    pub fn boundingBox(self: Primitive) AABB {
+        switch (self) {
+            .Sphere => |s| return s.bounding_box(),
+            .Quad => |q| return q.bounding_box(),
+        }
+    }
+};
+
 pub const HittableList = struct {
-    objects: MultiArrayList(Sphere),
+    spheres: MultiArrayList(Sphere),
+    quads: MultiArrayList(Quad),
     materials: ArrayList(Material),
     textures: ArrayList(Texture),
     images: ArrayList(RTWImage),
@@ -28,7 +49,8 @@ pub const HittableList = struct {
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
-            .objects = MultiArrayList(Sphere){},
+            .spheres = MultiArrayList(Sphere){},
+            .quads = MultiArrayList(Quad){},
             .materials = ArrayList(Material){},
             .textures = ArrayList(Texture){},
             .images = ArrayList(RTWImage){},
@@ -45,7 +67,8 @@ pub const HittableList = struct {
             self.bvh_root = null;
         }
 
-        self.*.objects.deinit(self.allocator);
+        self.*.spheres.deinit(self.allocator);
+        self.*.quads.deinit(self.allocator);
         self.materials.deinit(self.allocator);
         self.textures.deinit(self.allocator);
 
@@ -71,45 +94,23 @@ pub const HittableList = struct {
         return self.materials.items.len - 1;
     }
 
-    pub fn add(self: *Self, _sphere: Sphere) anyerror!*Self {
-        try self.*.objects.append(self.allocator, _sphere);
-
-        self.bbox = AABB.merge(self.bbox, _sphere.boundingBox());
-
+    pub fn add(self: *Self, obj: Primitive) anyerror!*Self {
+        switch (obj) {
+            .Sphere => |s| {
+                try self.*.spheres.append(self.allocator, s);
+                self.bbox = AABB.merge(self.bbox, s.bounding_box());
+            },
+            .Quad => |q| {
+                try self.*.quads.append(self.allocator, q);
+                self.bbox = AABB.merge(self.bbox, q.bounding_box());
+            },
+        }
         // Clear BVH since we've modified the object list
         if (self.bvh_root != null) {
             self.bvh_root.?.deinit(self.allocator);
             self.bvh_root = null;
         }
         return self;
-    }
-
-    // Build the BVH from the current list of objects
-    pub fn buildBVH(self: *Self) !void {
-        // Clear the existing BVH if it exists
-        if (self.bvh_root != null) {
-            self.bvh_root.?.deinit(self.allocator);
-            self.bvh_root = null;
-        }
-
-        // Only build if we have objects
-        //if (self.objects.items.len > 0) {
-        if (self.objects.len > 0) {
-
-            //
-            var tmp_spheres = try self.allocator.alloc(Sphere, self.objects.len);
-            defer self.allocator.free(tmp_spheres);
-
-            for (0..self.objects.len) |i| {
-                tmp_spheres[i] = self.objects.get(i);
-            }
-            //
-            // Create the BVH root node from all spheres
-            //const bvh_node = try BVHNode.initfromlist(self.allocator, self.objects.items);
-
-            const bvh_node = try BVHNode.initFromList(self.allocator, tmp_spheres);
-            self.bvh_root = try Hittable.createFromBVH(self.allocator, bvh_node);
-        }
     }
 
     pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *hit_record) !bool {
@@ -124,13 +125,13 @@ pub const HittableList = struct {
         // --- SoA OPTIMIZATION STARTS HERE ---
 
         // 1. Get slices for the specific fields we need for intersection
-        const centers = self.objects.items(.center);
-        const radii = self.objects.items(.radius);
-        const inv_radii = self.objects.items(.inv_radius);
-        const mat_ids = self.objects.items(.mat_id);
+        const centers = self.spheres.items(.center);
+        const radii = self.spheres.items(.radius);
+        const inv_radii = self.spheres.items(.inv_radius);
+        const mat_ids = self.spheres.items(.mat_id);
 
         // 2. Iterate by index
-        for (0..self.objects.len) |i| {
+        for (0..self.spheres.len) |i| {
             const center = centers[i];
             const radius = radii[i];
             const inv_radius = inv_radii[i];
@@ -172,6 +173,52 @@ pub const HittableList = struct {
             rec.mat_id = mat_ids[i];
         }
 
+        // --- QUAD SOA LOOP ---
+        // Fetch separate slices for Quad components
+        const Qs = self.quads.items(.Q);
+        const us = self.quads.items(.u);
+        const vs = self.quads.items(.v);
+        const ws = self.quads.items(.w);
+        const normals = self.quads.items(.normal);
+        const Ds = self.quads.items(.D);
+        const quad_mats = self.quads.items(.mat_id);
+
+        for (0..self.quads.len) |i| {
+            const normal = normals[i];
+            const D = Ds[i];
+
+            const denom = vec.dot(normal, r.direction);
+
+            // Parallel to plane check (approximate)
+            if (@abs(denom) < 1e-8) continue;
+
+            const t = (D - vec.dot(normal, r.origin)) / denom;
+
+            // Check against current closest_so_far
+            if (t < ray_t.min or t > closest_so_far) continue;
+
+            // Determine if hit is within the Quad (interior check)
+            const intersection = r.position(t);
+            const planar_hitpoint_vec = intersection - Qs[i];
+
+            const alpha = vec.dot(ws[i], vec.cross(planar_hitpoint_vec, vs[i]));
+            const beta = vec.dot(ws[i], vec.cross(us[i], planar_hitpoint_vec));
+
+            const unit_interval = Interval.init(0, 1);
+            if (!unit_interval.contains(alpha) or !unit_interval.contains(beta)) continue;
+
+            // Valid Hit!
+            closest_so_far = t;
+            hit_anything = true;
+
+            rec.t = t;
+            rec.p = intersection;
+            rec.mat_id = quad_mats[i];
+            rec.u = alpha;
+            rec.v = beta;
+            rec.set_face_normal(&r, &normal);
+        }
+
         return hit_anything;
     }
 
@@ -192,5 +239,37 @@ pub const HittableList = struct {
             output_box = AABB.merge(output_box, sphere.boundingBox());
         }
         return output_box;
+    }
+
+    pub fn buildBVH(self: *Self) !void {
+        if (self.bvh_root != null) {
+            self.bvh_root.?.deinit(self.allocator);
+            self.bvh_root = null;
+        }
+
+        const total_count = self.spheres.len + self.quads.len;
+        if (total_count == 0) return;
+
+        // Allocate a temporary list to hold all primitives for BVH construction
+        var primitives = try self.allocator.alloc(Primitive, total_count);
+        defer self.allocator.free(primitives);
+
+        var idx: usize = 0;
+
+        // Copy Spheres
+        for (0..self.spheres.len) |i| {
+            primitives[idx] = Primitive{ .Sphere = self.spheres.get(i) };
+            idx += 1;
+        }
+
+        // Copy Quads
+        for (0..self.quads.len) |i| {
+            primitives[idx] = Primitive{ .Quad = self.quads.get(i) };
+            idx += 1;
+        }
+
+        // Build BVH from the combined list
+        const bvh_node = try BVHNode.initFromList(self.allocator, primitives);
+        self.bvh_root = try Hittable.createFromBVH(self.allocator, bvh_node);
     }
 };

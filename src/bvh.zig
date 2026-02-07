@@ -6,6 +6,7 @@ const hit_record = @import("hittable.zig").hit_record;
 const AABB = @import("aabb.zig").AABB;
 const Sphere = @import("sphere.zig").Sphere;
 const vec = @import("vec.zig");
+const Primitive = @import("hittable_list.zig").Primitive;
 
 pub const BVHNode = struct {
     left: *Hittable,
@@ -15,13 +16,12 @@ pub const BVHNode = struct {
     const Self = @This();
 
     // Construct a bounding volume hierarchy node from a range of hittables
-    pub fn initFromList(allocator: std.mem.Allocator, objects: []Sphere) !*BVHNode {
+    pub fn initFromList(allocator: std.mem.Allocator, objects: []Primitive) !*BVHNode {
         return try initFromSpan(allocator, objects, 0, objects.len);
     }
 
-    pub fn initFromSpan(allocator: std.mem.Allocator, objects: []Sphere, start: usize, end: usize) !*BVHNode {
+    pub fn initFromSpan(allocator: std.mem.Allocator, objects: []Primitive, start: usize, end: usize) !*BVHNode {
         var node = try allocator.create(BVHNode);
-        //const axis = @as(u8, @intCast(rtw.random_int(0, 2)));
 
         var span_bbox = AABB.empty();
         for (start..end) |i| {
@@ -32,23 +32,21 @@ pub const BVHNode = struct {
         const object_span = end - start;
 
         if (object_span == 1) {
-            node.left = try createHittableFromSphere(allocator, objects[start]);
+            node.left = try createHittableFromPrimitive(allocator, objects[start]);
             node.right = node.left;
         } else if (object_span == 2) {
             if (boxCompare(objects[start], objects[start + 1], axis)) {
-                node.left = try createHittableFromSphere(allocator, objects[start]);
-                node.right = try createHittableFromSphere(allocator, objects[start + 1]);
+                node.left = try createHittableFromPrimitive(allocator, objects[start]);
+                node.right = try createHittableFromPrimitive(allocator, objects[start + 1]);
             } else {
-                node.left = try createHittableFromSphere(allocator, objects[start + 1]);
-                node.right = try createHittableFromSphere(allocator, objects[start]);
+                node.left = try createHittableFromPrimitive(allocator, objects[start + 1]);
+                node.right = try createHittableFromPrimitive(allocator, objects[start]);
             }
         } else {
-            // Sort the sub-slice in place — no copy needed.
-            sortSpheresByAxis(objects[start..end], axis);
+            sortPrimitivesByAxis(objects[start..end], axis);
 
             const mid = start + object_span / 2;
 
-            // Recurse on the now-sorted sub-slices.
             node.left = try Hittable.createFromBVH(allocator, try initFromSpan(allocator, objects, start, mid));
             node.right = try Hittable.createFromBVH(allocator, try initFromSpan(allocator, objects, mid, end));
         }
@@ -56,7 +54,6 @@ pub const BVHNode = struct {
         const box_left = getBoxForHittable(node.left);
         const box_right = getBoxForHittable(node.right);
         node.bbox = AABB.merge(box_left, box_right);
-
         return node;
     }
 
@@ -94,9 +91,9 @@ pub const BVHNode = struct {
 };
 
 // Helper function to compare two spheres by a given axis
-fn boxCompare(a: Sphere, b: Sphere, axis: u8) bool {
-    const box_a = getSphereBox(a);
-    const box_b = getSphereBox(b);
+fn boxCompare(a: Primitive, b: Primitive, axis: u8) bool {
+    const box_a = a.boundingBox();
+    const box_b = b.boundingBox();
 
     switch (axis) {
         0 => return box_a.x.min < box_b.x.min, // x-axis
@@ -107,15 +104,15 @@ fn boxCompare(a: Sphere, b: Sphere, axis: u8) bool {
 }
 
 // Helper function to sort spheres by a given axis
-fn sortSpheresByAxis(objects: []Sphere, axis: u8) void {
+fn sortPrimitivesByAxis(objects: []Primitive, axis: u8) void {
     const Context = struct {
         axis: u8,
-        pub fn lessThan(self: @This(), a: Sphere, b: Sphere) bool {
+        pub fn lessThan(self: @This(), a: Primitive, b: Primitive) bool {
             return boxCompare(a, b, self.axis);
         }
     };
 
-    std.sort.insertion(Sphere, objects, Context{ .axis = axis }, Context.lessThan);
+    std.sort.insertion(Primitive, objects, Context{ .axis = axis }, Context.lessThan);
 
     //std.sort.pdq(Sphere, objects, Context{ .axis = axis }, Context.lessThan);
 }
@@ -131,39 +128,39 @@ fn getBoxForHittable(hittable: *Hittable) AABB {
 }
 
 // Helper to create a hittable from a sphere
-fn createHittableFromSphere(allocator: std.mem.Allocator, sphere: Sphere) !*Hittable {
+fn createHittableFromPrimitive(allocator: std.mem.Allocator, primitive: Primitive) !*Hittable {
     const hittable = try allocator.create(Hittable);
-    hittable.* = Hittable{ .sphere = sphere };
+    hittable.* = Hittable{ .primitive = primitive };
     return hittable;
 }
 
 // A unified Hittable interface to handle different types
 pub const HittableType = enum {
-    sphere,
+    primitive,
     bvh_node,
 };
 
 pub const Hittable = union(HittableType) {
-    sphere: Sphere,
+    primitive: Primitive,
     bvh_node: *BVHNode,
 
     pub fn hit(self: Hittable, r: Ray, ray_t: Interval, rec: *hit_record) bool {
         return switch (self) {
-            .sphere => |s| s.hit(&r, ray_t, rec),
+            .primitive => |p| p.hit(&r, ray_t, rec),
             .bvh_node => |b| b.hit(r, ray_t, rec),
         };
     }
 
     pub fn boundingBox(self: Hittable) AABB {
         return switch (self) {
-            .sphere => |s| getSphereBox(s),
+            .primitive => |p| p.boundingBox(),
             .bvh_node => |b| b.boundingBox(),
         };
     }
 
     pub fn deinit(self: *Hittable, allocator: std.mem.Allocator) void {
         switch (self.*) {
-            .sphere => {}, // Nothing to free for a sphere
+            .primitive => {}, // Nothing to free for a sphere
             .bvh_node => |b| b.deinit(allocator),
         }
         allocator.destroy(self);

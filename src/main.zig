@@ -2,7 +2,9 @@ const rtw = @import("rtweekend.zig");
 const RTWImage = @import("rtw_stb_image.zig").RTWImage;
 const std = rtw.std;
 
+const Primitive = rtw.HittableList.Primitive;
 const Sphere = rtw.sphere.Sphere;
+const Quad = @import("quad.zig").Quad;
 const HittableList = rtw.HittableList.HittableList;
 const Camera = rtw.camera.Camera;
 const Material = rtw.material.Material;
@@ -10,6 +12,68 @@ const Texture = @import("texture.zig").Texture;
 const init = rtw.vec.init;
 const hittable_list = rtw.HittableList.HittableList;
 const Perlin = @import("perlin.zig").Perlin;
+
+pub fn draw_quads() !void {
+    const page = std.heap.page_allocator;
+    var arena = std.heap.ArenaAllocator.init(page);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var world = hittable_list.init(allocator);
+    defer world.deinit();
+
+    const red_tex = Texture.solid_color(@Vector(3, f32){ 1.0, 0.2, 0.2 });
+    const red_tex_id = try world.add_texture(red_tex);
+    const red = Material.lambertian(red_tex_id);
+    const red_id = try world.add_material(red);
+
+    const green_tex = Texture.solid_color(@Vector(3, f32){ 0.2, 1.0, 0.2 });
+    const green_tex_id = try world.add_texture(green_tex);
+    const green = Material.lambertian(green_tex_id);
+    const green_id = try world.add_material(green);
+
+    const blue_tex = Texture.solid_color(@Vector(3, f32){ 0.2, 0.2, 1.0 });
+    const blue_tex_id = try world.add_texture(blue_tex);
+    const blue = Material.lambertian(blue_tex_id);
+    const blue_id = try world.add_material(blue);
+
+    const orange_tex = Texture.solid_color(@Vector(3, f32){ 1.0, 0.5, 0.0 });
+    const orange_tex_id = try world.add_texture(orange_tex);
+    const orange = Material.lambertian(orange_tex_id);
+    const orange_id = try world.add_material(orange);
+
+    const teal_tex = Texture.solid_color(@Vector(3, f32){ 0.2, 0.8, 0.8 });
+    const teal_tex_id = try world.add_texture(teal_tex);
+    const teal = Material.lambertian(teal_tex_id);
+    const teal_id = try world.add_material(teal);
+
+    _ = try world.add(.{ .Quad = Quad.init(init(-3, -2, 5), init(0, 0, -4), init(0, 4, 0), red_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(-2, -2, 0), init(4, 0, 0), init(0, 4, 0), green_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(3, -2, 1), init(0, 0, 4), init(0, 4, 0), blue_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(-2, 3, 1), init(4, 0, 0), init(0, 0, 4), orange_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(-2, -3, 5), init(4, 0, 0), init(0, 0, -4), teal_id) });
+
+    try world.buildBVH();
+
+    var cam: Camera = undefined;
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 1000;
+    cam.samples_per_pixel = 100;
+    cam.max_depth = 50;
+
+    cam.vfov = 80;
+    cam.lookfrom = @Vector(3, f32){ 0, 0, 9 };
+    cam.lookat = @Vector(3, f32){
+        0,
+        0,
+        0,
+    };
+    cam.vup = @Vector(3, f32){ 0, 1, 0 };
+    cam.defocus_angle = 0.6;
+    cam.focus_dist = 10.0;
+
+    try cam.render(&world);
+}
 
 pub fn draw_perlin_spheres() !void {
     const page = std.heap.page_allocator;
@@ -25,8 +89,8 @@ pub fn draw_perlin_spheres() !void {
     const perlin_material = Material.lambertian(noise_tex_id);
     const perlin_material_id = try world.add_material(perlin_material);
 
-    _ = try world.add(Sphere.init(init(0, -1000, 0), null, 1000, perlin_material_id));
-    _ = try world.add(Sphere.init(init(0, 2, 0), null, 2, perlin_material_id));
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, -1000, 0), null, 1000, perlin_material_id) });
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, 2, 0), null, 2, perlin_material_id) });
 
     try world.buildBVH();
 
@@ -69,8 +133,8 @@ pub fn draw_checkered_spheres() !void {
     const material_ground = Material.lambertian(checker_id);
     const ground_id = try world.add_material(material_ground);
 
-    _ = try world.add(Sphere.init(init(0, -10, 0), null, 10, ground_id));
-    _ = try world.add(Sphere.init(init(0, 10, 0), null, 10, ground_id));
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, -10, 0), null, 10, ground_id) });
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, 10, 0), null, 10, ground_id) });
 
     try world.buildBVH();
 
@@ -111,7 +175,7 @@ pub fn draw_earth() !void {
     const earth_material = Material.lambertian(earth_tex_id);
     const earth_mat_id = try world.add_material(earth_material);
 
-    _ = try world.add(Sphere.init(init(0, 0, 0), null, 2.0, earth_mat_id));
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, 0, 0), null, 2.0, earth_mat_id) });
 
     try world.buildBVH();
 
@@ -177,26 +241,26 @@ pub fn draw_ppm() !void {
 
                     const sphere_material = Material.lambertian(sphere_tex_id);
                     const sphere_material_id = try world.add_material(sphere_material);
-                    _ = try world.add(Sphere.init(center, null, 0.2, sphere_material_id));
+                    _ = try world.add(.{ .Sphere = Sphere.init(center, null, 0.2, sphere_material_id) });
                 } else if (choose_mat < 0.95) {
                     const albedo = rtw.vec.random_vec_range(0.5, 1.0);
                     const fuzz = rtw.random_double_range(0, 0.5);
                     const sphere_material = Material.metal(albedo, fuzz);
                     const sphere_material_id = try world.add_material(sphere_material);
-                    _ = try world.add(Sphere.init(center, null, 0.2, sphere_material_id));
+                    _ = try world.add(.{ .Sphere = Sphere.init(center, null, 0.2, sphere_material_id) });
                 } else {
                     const sphere_material = Material.dielectric(1.5);
                     const sphere_material_id = try world.add_material(sphere_material);
-                    _ = try world.add(Sphere.init(center, null, 0.2, sphere_material_id));
+                    _ = try world.add(.{ .Sphere = Sphere.init(center, null, 0.2, sphere_material_id) });
                 }
             }
         }
     }
 
-    _ = try world.add(Sphere.init(init(0, 1, 0), null, 1.0, material1_id));
-    _ = try world.add(Sphere.init(init(-4, 1, 0), null, 1.0, material2_id));
-    _ = try world.add(Sphere.init(init(4, 1, 0), null, 1.0, material3_id));
-    _ = try world.add(Sphere.init(init(0.0, -1000, 0), null, 1000, ground_id));
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, 1, 0), null, 1.0, material1_id) });
+    _ = try world.add(.{ .Sphere = Sphere.init(init(-4, 1, 0), null, 1.0, material2_id) });
+    _ = try world.add(.{ .Sphere = Sphere.init(init(4, 1, 0), null, 1.0, material3_id) });
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0.0, -1000, 0), null, 1000, ground_id) });
 
     try world.buildBVH();
 
@@ -220,5 +284,6 @@ pub fn main() !void {
     //try draw_ppm();
     //try draw_checkered_spheres();
     //try draw_earth();
-    try draw_perlin_spheres();
+    //try draw_perlin_spheres();
+    try draw_quads();
 }

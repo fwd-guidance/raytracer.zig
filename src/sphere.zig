@@ -110,7 +110,7 @@ pub const Sphere = struct {
         rec.*.v = theta / std.math.pi;
     }
 
-    pub fn boundingBox(self: Self) AABB {
+    pub fn bounding_box(self: Self) AABB {
         const r_vec = @Vector(3, f32){ self.radius, self.radius, self.radius };
 
         if (self.moving) {
