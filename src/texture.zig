@@ -1,9 +1,13 @@
 const RTWImage = @import("rtw_stb_image.zig").RTWImage;
+const Perlin = @import("perlin.zig").Perlin;
+const vec = @import("rtweekend.zig").vec;
+const std = @import("std");
 
 pub const Texture = union(enum) {
     SolidColor: SolidColor,
     Checker: Checker,
     Image: Image,
+    Noise: Noise,
 
     pub fn solid_color(albedo: @Vector(3, f32)) Texture {
         return .{ .SolidColor = SolidColor{ .albedo = albedo } };
@@ -17,11 +21,16 @@ pub const Texture = union(enum) {
         return .{ .Image = Image{ .image = img } };
     }
 
+    pub fn noise(scale: f32) Texture {
+        return .{ .Noise = Noise.init(scale) };
+    }
+
     pub fn value(self: *const Texture, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         return switch (self.*) {
             .SolidColor => |sc| sc.value(u, v, p),
             .Checker => |c| c.value(u, v, p),
             .Image => |i| i.value(u, v, p),
+            .Noise => |perlin| perlin.value(u, v, p),
         };
     }
 };
@@ -85,5 +94,25 @@ pub const Image = struct {
         if (x < min) return min;
         if (x > max) return max;
         return x;
+    }
+};
+
+pub const Noise = struct {
+    perlin: Perlin,
+    scale: f32,
+
+    pub fn init(scale: f32) Noise {
+        return .{
+            .perlin = Perlin.init(),
+            .scale = scale,
+        };
+    }
+
+    pub fn value(self: Noise, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+        _ = u;
+        _ = v;
+
+        const half_vec = @Vector(3, f32){ 0.5, 0.5, 0.5 };
+        return vec.scale(half_vec, (1 + std.math.sin(self.scale * p[0] + 10 * self.perlin.turb(p, 7))));
     }
 };

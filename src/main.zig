@@ -9,6 +9,42 @@ const Material = rtw.material.Material;
 const Texture = @import("texture.zig").Texture;
 const init = rtw.vec.init;
 const hittable_list = rtw.HittableList.HittableList;
+const Perlin = @import("perlin.zig").Perlin;
+
+pub fn draw_perlin_spheres() !void {
+    const page = std.heap.page_allocator;
+    var arena = std.heap.ArenaAllocator.init(page);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var world = hittable_list.init(allocator);
+    defer world.deinit();
+
+    const noise_tex = Texture.noise(4);
+    const noise_tex_id = try world.add_texture(noise_tex);
+    const perlin_material = Material.lambertian(noise_tex_id);
+    const perlin_material_id = try world.add_material(perlin_material);
+
+    _ = try world.add(Sphere.init(init(0, -1000, 0), null, 1000, perlin_material_id));
+    _ = try world.add(Sphere.init(init(0, 2, 0), null, 2, perlin_material_id));
+
+    try world.buildBVH();
+
+    var cam: Camera = undefined;
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 1600;
+    cam.samples_per_pixel = 500;
+    cam.max_depth = 50;
+
+    cam.vfov = 20;
+    cam.lookfrom = @Vector(3, f32){ 13, 2, 3 };
+    cam.lookat = @Vector(3, f32){ 0, 0, 0 };
+    cam.vup = @Vector(3, f32){ 0, 1, 0 };
+    cam.defocus_angle = 0.0;
+    cam.focus_dist = 10.0;
+
+    try cam.render(&world);
+}
 
 pub fn draw_checkered_spheres() !void {
     const page = std.heap.page_allocator;
@@ -40,7 +76,7 @@ pub fn draw_checkered_spheres() !void {
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
-    cam.image_width = 400;
+    cam.image_width = 1600;
     cam.samples_per_pixel = 500;
     cam.max_depth = 50;
 
@@ -125,7 +161,7 @@ pub fn draw_ppm() !void {
     const material3 = Material.metal(@Vector(3, f32){ 0.7, 0.6, 0.5 }, 0.0);
     const material3_id = try world.add_material(material3);
 
-    var a: f32 = 11;
+    var a: f32 = -11;
     while (a < 11) : (a += 1) {
         var b: f32 = -11;
         while (b < 11) : (b += 1) {
@@ -181,7 +217,8 @@ pub fn draw_ppm() !void {
 }
 
 pub fn main() !void {
-    try draw_ppm();
+    //try draw_ppm();
     //try draw_checkered_spheres();
     //try draw_earth();
+    try draw_perlin_spheres();
 }
