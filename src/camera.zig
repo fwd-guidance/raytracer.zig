@@ -40,6 +40,7 @@ pub const Camera = struct {
     defocus_disk_v: @Vector(3, f32),
     mutex: Mutex,
     num_threads: usize,
+    background: @Vector(3, f32),
     const Self = @This();
 
     pub fn initialize(self: *Self) void {
@@ -133,7 +134,7 @@ pub const Camera = struct {
                         var sample: u32 = 0;
                         while (sample < camera.samples_per_pixel) : (sample += 1) {
                             const r: Ray = get_ray(camera, i, j);
-                            pixel_color += ray_color(r, camera.max_depth, world_objects);
+                            pixel_color += ray_color(camera, r, camera.max_depth, world_objects);
                         }
 
                         const buffer_index = @as(usize, j) * @as(usize, cam_width) + @as(usize, i);
@@ -216,45 +217,53 @@ pub const Camera = struct {
         return self.center + vec.scale(self.defocus_disk_u, p[0]) + vec.scale(self.defocus_disk_v, p[1]);
     }
 
-    /// Recursive ray colour.  Now fully error-free — all vec and material
-    /// scatter calls are infallible.  Depth is an integer counter.
-    fn ray_color(r: Ray, depth: u32, world: *const hittable_list) @Vector(3, f32) {
+    /// Recursive ray colour with emissive material support.
+    /// Returns the color contribution from both emitted light and scattered rays.
+    fn ray_color(camera: *const Self, r: Ray, depth: u32, world: *const hittable_list) @Vector(3, f32) {
+        // If we've exceeded the ray bounce limit, no more light is gathered
         if (depth <= 0) return init(0, 0, 0);
 
         var rec: hit_record = undefined;
         const hit_result = world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec);
 
-        if (try hit_result) {
-            var scattered: Ray = undefined;
-            var attenuation: @Vector(3, f32) = undefined;
-
-            const mat = world.materials.items[rec.mat_id];
-
-            switch (mat) {
-                .Lambertian => |l| {
-                    if (l.scatter(&r, &rec, &attenuation, &scattered)) {
-                        attenuation = world.textures.items[l.tex_id].value(rec.u, rec.v, rec.p);
-                        return attenuation * ray_color(scattered, depth - 1, world);
-                    }
-                },
-                .Metal => |m| {
-                    if (m.scatter(&r, &rec, &attenuation, &scattered)) {
-                        return attenuation * ray_color(scattered, depth - 1, world);
-                    }
-                },
-                .Dielectric => |d| {
-                    if (d.scatter(&r, &rec, &attenuation, &scattered)) {
-                        return attenuation * ray_color(scattered, depth - 1, world);
-                    }
-                },
-            }
-
-            return @Vector(3, f32){ 0.0, 0.0, 0.0 };
+        // If the ray hits nothing, return the background color
+        if (!(try hit_result)) {
+            return camera.background;
         }
 
-        // Sky gradient
-        const unit_direction: @Vector(3, f32) = vec.unit(r.direction);
-        const a: f32 = 0.5 * (unit_direction[1] + 1.0);
-        return vec.scale(init(1.0, 1.0, 1.0), 1.0 - a) + vec.scale(init(0.5, 0.7, 1.0), a);
+        var scattered: Ray = undefined;
+        var attenuation: @Vector(3, f32) = undefined;
+
+        const mat = world.materials.items[rec.mat_id];
+
+        // Get emitted color from the material (black for non-emissive materials)
+        const color_from_emission = mat.emitted(rec.u, rec.v, rec.p, world.textures.items);
+
+        // Try to scatter the ray
+        // Use the unified Material.scatter() method or handle each case
+        const did_scatter = switch (mat) {
+            .Lambertian => |l| blk: {
+                if (l.scatter(&r, &rec, &attenuation, &scattered)) {
+                    // Override attenuation with texture value for Lambertian
+                    attenuation = world.textures.items[l.tex_id].value(rec.u, rec.v, rec.p);
+                    break :blk true;
+                }
+                break :blk false;
+            },
+            .Metal => |m| m.scatter(&r, &rec, &attenuation, &scattered),
+            .Dielectric => |d| d.scatter(&r, &rec, &attenuation, &scattered),
+            .DiffuseLight => false, // Lights don't scatter
+        };
+
+        // If the material doesn't scatter, return only the emitted color
+        if (!did_scatter) {
+            return color_from_emission;
+        }
+
+        // Calculate color from scattered ray
+        const color_from_scatter = attenuation * ray_color(camera, scattered, depth - 1, world);
+
+        // Return combined emission and scatter
+        return color_from_emission + color_from_scatter;
     }
 };

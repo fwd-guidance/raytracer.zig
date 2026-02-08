@@ -1,6 +1,6 @@
 const rtw = @import("rtweekend.zig");
 
-const Texture = @import("texture.zig");
+const Texture = @import("texture.zig").Texture;
 const Ray = rtw.Ray;
 const hit_record = rtw.hit_record;
 
@@ -8,6 +8,7 @@ pub const Material = union(enum) {
     Lambertian: Lambertian,
     Metal: Metal,
     Dielectric: Dielectric,
+    DiffuseLight: DiffuseLight,
 
     pub fn lambertian(tex_id: usize) Material {
         return Material{ .Lambertian = Lambertian{ .tex_id = tex_id } };
@@ -19,6 +20,26 @@ pub const Material = union(enum) {
 
     pub fn dielectric(refraction_index: f32) Material {
         return Material{ .Dielectric = Dielectric.init(refraction_index) };
+    }
+
+    pub fn diffuse_light(tex_id: usize) Material {
+        return Material{ .DiffuseLight = DiffuseLight{ .tex_id = tex_id } };
+    }
+
+    pub fn scatter(self: Material, r_in: *const Ray, rec: *const hit_record, attenuation: @Vector(3, f32), scattered: *Ray) bool {
+        return switch (self) {
+            .Lambertian => |l| l.scatter(r_in, rec, attenuation, scattered),
+            .Metal => |m| m.scatter(r_in, rec, attenuation, scattered),
+            .Dielectric => |d| d.scatter(r_in, rec, attenuation, scattered),
+            .DiffuseLight => false,
+        };
+    }
+
+    pub fn emitted(self: Material, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+        return switch (self) {
+            .DiffuseLight => |d| d.emitted(u, v, p, textures),
+            else => @Vector(3, f32){ 0, 0, 0 },
+        };
     }
 };
 
@@ -91,5 +112,13 @@ pub const Dielectric = struct {
         const one_minus = 1 - cosine;
         const sq = one_minus * one_minus;
         return self.r0 + self.one_minus_r0 * (sq * sq * one_minus);
+    }
+};
+
+pub const DiffuseLight = struct {
+    tex_id: usize,
+
+    pub fn emitted(self: DiffuseLight, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+        return textures[self.tex_id].value(u, v, p);
     }
 };
