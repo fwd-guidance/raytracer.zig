@@ -9,6 +9,7 @@ pub const Material = union(enum) {
     Metal: Metal,
     Dielectric: Dielectric,
     DiffuseLight: DiffuseLight,
+    Isotropic: Isotropic,
 
     pub fn lambertian(tex_id: usize) Material {
         return Material{ .Lambertian = Lambertian{ .tex_id = tex_id } };
@@ -26,12 +27,17 @@ pub const Material = union(enum) {
         return Material{ .DiffuseLight = DiffuseLight{ .tex_id = tex_id } };
     }
 
+    pub fn isotropic(tex_id: usize) Material {
+        return Material{ .Isotropic = Isotropic{ .tex_id = tex_id } };
+    }
+
     pub fn scatter(self: Material, r_in: *const Ray, rec: *const hit_record, attenuation: @Vector(3, f32), scattered: *Ray) bool {
         return switch (self) {
             .Lambertian => |l| l.scatter(r_in, rec, attenuation, scattered),
             .Metal => |m| m.scatter(r_in, rec, attenuation, scattered),
             .Dielectric => |d| d.scatter(r_in, rec, attenuation, scattered),
             .DiffuseLight => false,
+            .Isotropic => |i| i.scatter(r_in, rec, attenuation, scattered),
         };
     }
 
@@ -120,5 +126,16 @@ pub const DiffuseLight = struct {
 
     pub fn emitted(self: DiffuseLight, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
         return textures[self.tex_id].value(u, v, p);
+    }
+};
+
+pub const Isotropic = struct {
+    tex_id: usize,
+
+    pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture) bool {
+        const texture = textures[self.tex_id];
+        scattered.* = Ray.init(rec.*.p, rtw.vec.random_unit_vector(), r_in.*.tm);
+        attenuation.* = texture.value(rec.*.u, rec.*.v, rec.*.p);
+        return true;
     }
 };

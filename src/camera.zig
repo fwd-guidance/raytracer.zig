@@ -250,6 +250,11 @@ pub const Camera = struct {
                 }
                 break :blk false;
             },
+            .Isotropic => |i| blk: {
+                scattered = Ray.init(rec.p, vec.random_unit_vector(), r.tm);
+                attenuation = world.textures.items[i.tex_id].value(rec.u, rec.v, rec.p);
+                break :blk true;
+            },
             .Metal => |m| m.scatter(&r, &rec, &attenuation, &scattered),
             .Dielectric => |d| d.scatter(&r, &rec, &attenuation, &scattered),
             .DiffuseLight => false, // Lights don't scatter

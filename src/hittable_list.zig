@@ -9,6 +9,7 @@ const Quad = @import("quad.zig").Quad;
 const Box = @import("box.zig").Box;
 const Translate = @import("instance.zig").Translate;
 const RotateY = @import("instance.zig").RotateY;
+const ConstantMedium = @import("constant_medium.zig").ConstantMedium;
 const Material = rtw.material.Material;
 const Texture = @import("texture.zig").Texture;
 const RTWImage = @import("rtw_stb_image.zig").RTWImage;
@@ -25,6 +26,7 @@ pub const Primitive = union(enum) {
     Box: Box,
     Translate: Translate,
     RotateY: RotateY,
+    ConstantMedium: ConstantMedium,
 
     pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
         switch (self) {
@@ -33,6 +35,7 @@ pub const Primitive = union(enum) {
             .Box => |b| return b.hit(r, ray_t, rec),
             .Translate => |t| return t.hit(r, ray_t, rec),
             .RotateY => |rY| return rY.hit(r, ray_t, rec),
+            .ConstantMedium => |cm| return cm.hit(r, ray_t, rec),
         }
     }
 
@@ -43,6 +46,7 @@ pub const Primitive = union(enum) {
             .Box => |b| return b.bounding_box(),
             .Translate => |t| return t.bounding_box(),
             .RotateY => |rY| return rY.bounding_box(),
+            .ConstantMedium => |cm| return cm.bounding_box(),
         }
     }
 };
@@ -53,6 +57,7 @@ pub const HittableList = struct {
     boxes: ArrayList(Box),
     translates: ArrayList(Translate),
     rotations: ArrayList(RotateY),
+    constant_mediums: ArrayList(ConstantMedium),
     materials: ArrayList(Material),
     textures: ArrayList(Texture),
     images: ArrayList(RTWImage),
@@ -69,6 +74,7 @@ pub const HittableList = struct {
             .boxes = ArrayList(Box){},
             .translates = ArrayList(Translate){},
             .rotations = ArrayList(RotateY){},
+            .constant_mediums = ArrayList(ConstantMedium){},
             .materials = ArrayList(Material){},
             .textures = ArrayList(Texture){},
             .images = ArrayList(RTWImage){},
@@ -97,6 +103,12 @@ pub const HittableList = struct {
         }
 
         self.boxes.deinit(self.allocator);
+
+        for (self.constant_mediums.items) |*cm| {
+            cm.deinit();
+        }
+
+        self.constant_mediums.deinit(self.allocator);
 
         for (self.images.items) |*img| {
             img.deinit();
@@ -141,6 +153,10 @@ pub const HittableList = struct {
             .RotateY => |rY| {
                 try self.*.rotations.append(self.allocator, rY);
                 self.bbox = AABB.merge(self.bbox, rY.bounding_box());
+            },
+            .ConstantMedium => |cm| {
+                try self.*.constant_mediums.append(self.allocator, cm);
+                self.bbox = AABB.merge(self.bbox, cm.bounding_box());
             },
         }
         // Clear BVH since we've modified the object list
@@ -278,6 +294,13 @@ pub const HittableList = struct {
             }
         }
 
+        for (self.constant_mediums.items) |cm| {
+            if (cm.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
+                hit_anything = true;
+                closest_so_far = rec.t;
+            }
+        }
+
         return hit_anything;
     }
 
@@ -306,7 +329,7 @@ pub const HittableList = struct {
             self.bvh_root = null;
         }
 
-        const total_count = self.spheres.len + self.quads.len + self.boxes.items.len + self.translates.items.len + self.rotations.items.len;
+        const total_count = self.spheres.len + self.quads.len + self.boxes.items.len + self.translates.items.len + self.rotations.items.len + self.constant_mediums.items.len;
         if (total_count == 0) return;
 
         // Allocate a temporary list to hold all primitives for BVH construction
@@ -339,6 +362,11 @@ pub const HittableList = struct {
 
         for (self.rotations.items) |rY| {
             primitives[idx] = Primitive{ .RotateY = rY };
+            idx += 1;
+        }
+
+        for (self.constant_mediums.items) |cm| {
+            primitives[idx] = Primitive{ .ConstantMedium = cm };
             idx += 1;
         }
 

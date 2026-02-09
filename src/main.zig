@@ -15,6 +15,7 @@ const Texture = @import("texture.zig").Texture;
 const init = rtw.vec.init;
 const hittable_list = rtw.HittableList.HittableList;
 const Perlin = @import("perlin.zig").Perlin;
+const ConstantMedium = @import("constant_medium.zig").ConstantMedium;
 
 pub fn draw_cornell_box() !void {
     const page = std.heap.page_allocator;
@@ -40,14 +41,14 @@ pub fn draw_cornell_box() !void {
     const white = Material.lambertian(white_tex_id);
     const white_id = try world.add_material(white);
 
-    const light_tex = Texture.solid_color(@Vector(3, f32){ 15.0, 15.0, 15.0 });
+    const light_tex = Texture.solid_color(@Vector(3, f32){ 7, 7, 7 });
     const light_tex_id = try world.add_texture(light_tex);
     const difflight = Material.diffuse_light(light_tex_id);
     const difflight_id = try world.add_material(difflight);
 
     _ = try world.add(.{ .Quad = Quad.init(init(555, 0, 0), init(0, 555, 0), init(0, 0, 555), green_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(0, 555, 0), init(0, 0, 555), red_id) });
-    _ = try world.add(.{ .Quad = Quad.init(init(343, 554, 332), init(-130, 0, 0), init(0, 0, -105), difflight_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(113, 554, 127), init(330, 0, 0), init(0, 0, 305), difflight_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(555, 0, 0), init(0, 0, 555), white_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(555, 555, 555), init(-555, 0, 0), init(0, 0, -555), white_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(555, 0, 0), init(0, 555, 0), white_id) });
@@ -55,16 +56,31 @@ pub fn draw_cornell_box() !void {
     const box1 = try Box.init(allocator, init(0, 0, 0), init(165, 330, 165), white_id);
     const box1_rotated = try RotateY.init(allocator, .{ .Box = box1 }, 15.0);
     const box1_final = try Translate.init(allocator, .{ .RotateY = box1_rotated }, init(265, 0, 295));
-    _ = try world.add(.{ .Translate = box1_final });
 
-    // Second box: rotated -18 degrees, then translated
+    // Create a black smoke texture
+    const black_tex = Texture.solid_color(@Vector(3, f32){ 0.0, 0.0, 0.0 });
+    const black_tex_id = try world.add_texture(black_tex);
+
+    // Wrap in constant medium (density controls how thick the smoke is)
+    const box1_smoke = try ConstantMedium.init(allocator, .{ .Translate = box1_final }, // The boundary primitive
+        0.01, // Density (lower = thinner, higher = thicker)
+        black_tex_id, // Texture for the smoke color
+        &world);
+    _ = try world.add(.{ .ConstantMedium = box1_smoke });
+
+    // Second box: rotated, translated, then made into white smoke
     const box2 = try Box.init(allocator, init(0, 0, 0), init(165, 165, 165), white_id);
     const box2_rotated = try RotateY.init(allocator, .{ .Box = box2 }, -18.0);
     const box2_final = try Translate.init(allocator, .{ .RotateY = box2_rotated }, init(130, 0, 65));
-    _ = try world.add(.{ .Translate = box2_final });
 
-    //_ = try world.add_box(init(130, 0, 65), init(295, 165, 230), white_id);
-    //_ = try world.add_box(init(265, 0, 295), init(430, 330, 460), white_id);
+    // Create a white smoke texture
+    const white_smoke_tex = Texture.solid_color(@Vector(3, f32){ 1.0, 1.0, 1.0 });
+    const white_smoke_tex_id = try world.add_texture(white_smoke_tex);
+
+    // Wrap in constant medium
+    const box2_smoke = try ConstantMedium.init(allocator, .{ .Translate = box2_final }, 0.01, // Same density
+        white_smoke_tex_id, &world);
+    _ = try world.add(.{ .ConstantMedium = box2_smoke });
 
     try world.buildBVH();
 
