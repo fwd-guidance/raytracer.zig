@@ -31,6 +31,10 @@ pub const AABB = struct {
         return pad(aabb);
     }
 
+    pub fn add(self: AABB, offset: @Vector(3, f32)) AABB {
+        return .{ .x = self.x.add(offset[0]), .y = self.y.add(offset[1]), .z = self.z.add(offset[2]) };
+    }
+
     pub fn longest_axis(self: AABB) u8 {
         const x_size = self.x.size();
         const y_size = self.y.size();

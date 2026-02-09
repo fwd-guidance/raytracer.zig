@@ -5,6 +5,9 @@ const std = rtw.std;
 const Primitive = rtw.HittableList.Primitive;
 const Sphere = rtw.sphere.Sphere;
 const Quad = @import("quad.zig").Quad;
+const Box = @import("box.zig").Box;
+const RotateY = @import("instance.zig").RotateY;
+const Translate = @import("instance.zig").Translate;
 const HittableList = rtw.HittableList.HittableList;
 const Camera = rtw.camera.Camera;
 const Material = rtw.material.Material;
@@ -48,6 +51,20 @@ pub fn draw_cornell_box() !void {
     _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(555, 0, 0), init(0, 0, 555), white_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(555, 555, 555), init(-555, 0, 0), init(0, 0, -555), white_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(555, 0, 0), init(0, 555, 0), white_id) });
+
+    const box1 = try Box.init(allocator, init(0, 0, 0), init(165, 330, 165), white_id);
+    const box1_rotated = try RotateY.init(allocator, .{ .Box = box1 }, 15.0);
+    const box1_final = try Translate.init(allocator, .{ .RotateY = box1_rotated }, init(265, 0, 295));
+    _ = try world.add(.{ .Translate = box1_final });
+
+    // Second box: rotated -18 degrees, then translated
+    const box2 = try Box.init(allocator, init(0, 0, 0), init(165, 165, 165), white_id);
+    const box2_rotated = try RotateY.init(allocator, .{ .Box = box2 }, -18.0);
+    const box2_final = try Translate.init(allocator, .{ .RotateY = box2_rotated }, init(130, 0, 65));
+    _ = try world.add(.{ .Translate = box2_final });
+
+    //_ = try world.add_box(init(130, 0, 65), init(295, 165, 230), white_id);
+    //_ = try world.add_box(init(265, 0, 295), init(430, 330, 460), white_id);
 
     try world.buildBVH();
 

@@ -6,6 +6,9 @@ const Ray = rtw.ray.Ray;
 const hit_record = rtw.hittable.hit_record;
 const Sphere = rtw.sphere.Sphere;
 const Quad = @import("quad.zig").Quad;
+const Box = @import("box.zig").Box;
+const Translate = @import("instance.zig").Translate;
+const RotateY = @import("instance.zig").RotateY;
 const Material = rtw.material.Material;
 const Texture = @import("texture.zig").Texture;
 const RTWImage = @import("rtw_stb_image.zig").RTWImage;
@@ -19,11 +22,17 @@ const vec = @import("vec.zig");
 pub const Primitive = union(enum) {
     Sphere: Sphere,
     Quad: Quad,
+    Box: Box,
+    Translate: Translate,
+    RotateY: RotateY,
 
     pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
         switch (self) {
             .Sphere => |s| return s.hit(r, ray_t, rec),
             .Quad => |q| return q.hit(r, ray_t, rec),
+            .Box => |b| return b.hit(r, ray_t, rec),
+            .Translate => |t| return t.hit(r, ray_t, rec),
+            .RotateY => |rY| return rY.hit(r, ray_t, rec),
         }
     }
 
@@ -31,6 +40,9 @@ pub const Primitive = union(enum) {
         switch (self) {
             .Sphere => |s| return s.bounding_box(),
             .Quad => |q| return q.bounding_box(),
+            .Box => |b| return b.bounding_box(),
+            .Translate => |t| return t.bounding_box(),
+            .RotateY => |rY| return rY.bounding_box(),
         }
     }
 };
@@ -38,6 +50,9 @@ pub const Primitive = union(enum) {
 pub const HittableList = struct {
     spheres: MultiArrayList(Sphere),
     quads: MultiArrayList(Quad),
+    boxes: ArrayList(Box),
+    translates: ArrayList(Translate),
+    rotations: ArrayList(RotateY),
     materials: ArrayList(Material),
     textures: ArrayList(Texture),
     images: ArrayList(RTWImage),
@@ -51,6 +66,9 @@ pub const HittableList = struct {
         return Self{
             .spheres = MultiArrayList(Sphere){},
             .quads = MultiArrayList(Quad){},
+            .boxes = ArrayList(Box){},
+            .translates = ArrayList(Translate){},
+            .rotations = ArrayList(RotateY){},
             .materials = ArrayList(Material){},
             .textures = ArrayList(Texture){},
             .images = ArrayList(RTWImage){},
@@ -69,8 +87,16 @@ pub const HittableList = struct {
 
         self.*.spheres.deinit(self.allocator);
         self.*.quads.deinit(self.allocator);
+        self.translates.deinit(self.allocator);
+        self.rotations.deinit(self.allocator);
         self.materials.deinit(self.allocator);
         self.textures.deinit(self.allocator);
+
+        for (self.boxes.items) |*b| {
+            b.deinit();
+        }
+
+        self.boxes.deinit(self.allocator);
 
         for (self.images.items) |*img| {
             img.deinit();
@@ -103,6 +129,18 @@ pub const HittableList = struct {
             .Quad => |q| {
                 try self.*.quads.append(self.allocator, q);
                 self.bbox = AABB.merge(self.bbox, q.bounding_box());
+            },
+            .Box => |b| {
+                try self.boxes.append(self.allocator, b);
+                self.bbox = AABB.merge(self.bbox, b.bounding_box());
+            },
+            .Translate => |t| {
+                try self.*.translates.append(self.allocator, t);
+                self.bbox = AABB.merge(self.bbox, t.bounding_box());
+            },
+            .RotateY => |rY| {
+                try self.*.rotations.append(self.allocator, rY);
+                self.bbox = AABB.merge(self.bbox, rY.bounding_box());
             },
         }
         // Clear BVH since we've modified the object list
@@ -219,6 +257,27 @@ pub const HittableList = struct {
             rec.set_face_normal(&r, &normal);
         }
 
+        for (self.boxes.items) |b| {
+            if (b.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
+                hit_anything = true;
+                closest_so_far = rec.t;
+            }
+        }
+
+        for (self.translates.items) |t| {
+            if (t.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
+                hit_anything = true;
+                closest_so_far = rec.t;
+            }
+        }
+
+        for (self.rotations.items) |rY| {
+            if (rY.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
+                hit_anything = true;
+                closest_so_far = rec.t;
+            }
+        }
+
         return hit_anything;
     }
 
@@ -247,7 +306,7 @@ pub const HittableList = struct {
             self.bvh_root = null;
         }
 
-        const total_count = self.spheres.len + self.quads.len;
+        const total_count = self.spheres.len + self.quads.len + self.boxes.items.len + self.translates.items.len + self.rotations.items.len;
         if (total_count == 0) return;
 
         // Allocate a temporary list to hold all primitives for BVH construction
@@ -265,6 +324,21 @@ pub const HittableList = struct {
         // Copy Quads
         for (0..self.quads.len) |i| {
             primitives[idx] = Primitive{ .Quad = self.quads.get(i) };
+            idx += 1;
+        }
+
+        for (self.boxes.items) |b| {
+            primitives[idx] = Primitive{ .Box = b };
+            idx += 1;
+        }
+
+        for (self.translates.items) |t| {
+            primitives[idx] = Primitive{ .Translate = t };
+            idx += 1;
+        }
+
+        for (self.rotations.items) |rY| {
+            primitives[idx] = Primitive{ .RotateY = rY };
             idx += 1;
         }
 

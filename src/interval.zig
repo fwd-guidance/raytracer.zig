@@ -25,7 +25,11 @@ pub const Interval = struct {
             .max = std.math.inf(f32),
         };
     }
-    
+
+    pub fn add(self: Interval, displacement: f32) Interval {
+        return .{ .min = self.min + displacement, .max = self.max + displacement };
+    }
+
     pub fn size(self: Self) f32 {
         return self.max - self.min;
     }
@@ -43,7 +47,7 @@ pub const Interval = struct {
         if (x > self.max) return self.max;
         return x;
     }
-    
+
     pub fn expand(self: Self, delta: f32) Self {
         const padding = delta / 2.0;
         return Self{
@@ -51,7 +55,7 @@ pub const Interval = struct {
             .max = self.max + padding,
         };
     }
-    
+
     pub fn merge(a: Self, b: Self) Self {
         return Self{
             .min = @min(a.min, b.min),
