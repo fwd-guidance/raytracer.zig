@@ -17,6 +17,149 @@ const hittable_list = rtw.HittableList.HittableList;
 const Perlin = @import("perlin.zig").Perlin;
 const ConstantMedium = @import("constant_medium.zig").ConstantMedium;
 
+pub fn draw_final_scene() !void {
+    const page = std.heap.page_allocator;
+    var arena = std.heap.ArenaAllocator.init(page);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var world = hittable_list.init(allocator);
+    defer world.deinit();
+
+    // Ground material
+    const ground_tex = Texture.solid_color(@Vector(3, f32){ 0.48, 0.83, 0.53 });
+    const ground_tex_id = try world.add_texture(ground_tex);
+    const ground = Material.lambertian(ground_tex_id);
+    const ground_id = try world.add_material(ground);
+
+    // Create ground boxes (20x20 grid)
+    const boxes_per_side = 20;
+    var i: usize = 0;
+    while (i < boxes_per_side) : (i += 1) {
+        var j: usize = 0;
+        while (j < boxes_per_side) : (j += 1) {
+            const w: f32 = 100.0;
+            const fi: f32 = @floatFromInt(i);
+            const fj: f32 = @floatFromInt(j);
+            const x0 = -1000.0 + fi * w;
+            const z0 = -1000.0 + fj * w;
+            const y0: f32 = 0.0;
+            const x1 = x0 + w;
+            const y1 = rtw.random_double_range(1, 101);
+            const z1 = z0 + w;
+
+            //_ = try world.add_box(init(x0, y0, z0), init(x1, y1, z1), ground_id);
+            _ = try world.add(.{ .Box = try Box.init(allocator, init(x0, y0, z0), init(x1, y1, z1), ground_id) });
+        }
+    }
+
+    //// Light
+    const light_tex = Texture.solid_color(@Vector(3, f32){ 7.0, 7.0, 7.0 });
+    const light_tex_id = try world.add_texture(light_tex);
+    const light = Material.diffuse_light(light_tex_id);
+    const light_id = try world.add_material(light);
+    _ = try world.add(.{ .Quad = Quad.init(init(123, 554, 147), init(300, 0, 0), init(0, 0, 265), light_id) });
+
+    // Moving sphere
+    const center1 = init(400, 400, 200);
+    const center2 = center1 + init(30, 0, 0);
+    const sphere_tex = Texture.solid_color(@Vector(3, f32){ 0.7, 0.3, 0.1 });
+    const sphere_tex_id = try world.add_texture(sphere_tex);
+    const sphere_material = Material.lambertian(sphere_tex_id);
+    const sphere_mat_id = try world.add_material(sphere_material);
+    _ = try world.add(.{ .Sphere = Sphere.init(center1, center2, 50, sphere_mat_id) });
+
+    // Glass sphere
+    const glass = Material.dielectric(1.5);
+    const glass_id = try world.add_material(glass);
+    _ = try world.add(.{ .Sphere = Sphere.init(init(260, 150, 45), null, 50, glass_id) });
+
+    // Metal sphere
+    const metal = Material.metal(@Vector(3, f32){ 0.8, 0.8, 0.9 }, 1.0);
+    const metal_id = try world.add_material(metal);
+    _ = try world.add(.{ .Sphere = Sphere.init(init(0, 150, 145), null, 50, metal_id) });
+
+    // Glass sphere with fog inside
+    const boundary_sphere = Primitive{ .Sphere = Sphere.init(init(360, 150, 145), null, 70, glass_id) };
+    _ = try world.add(boundary_sphere);
+
+    const fog_tex = Texture.solid_color(@Vector(3, f32){ 0.2, 0.4, 0.9 });
+    const fog_tex_id = try world.add_texture(fog_tex);
+    const fog = try ConstantMedium.init(allocator, boundary_sphere, 0.2, fog_tex_id, &world);
+    _ = try world.add(.{ .ConstantMedium = fog });
+
+    // Atmospheric fog (huge sphere)
+    const atmosphere_boundary = Primitive{ .Sphere = Sphere.init(init(0, 0, 0), null, 5000, glass_id) };
+    const white_fog_tex = Texture.solid_color(@Vector(3, f32){ 1.0, 1.0, 1.0 });
+    const white_fog_tex_id = try world.add_texture(white_fog_tex);
+    const atmosphere = try ConstantMedium.init(allocator, atmosphere_boundary, 0.0001, white_fog_tex_id, &world);
+    _ = try world.add(.{ .ConstantMedium = atmosphere });
+
+    // Earth sphere
+    const earth_image = try RTWImage.init_from_file(allocator, "earthmap.jpg");
+    const earth_img_id = try world.add_image(earth_image);
+    const earth_texture = Texture.image(&world.images.items[earth_img_id]);
+    const earth_tex_id = try world.add_texture(earth_texture);
+    const earth_material = Material.lambertian(earth_tex_id);
+    const earth_mat_id = try world.add_material(earth_material);
+    _ = try world.add(.{ .Sphere = Sphere.init(init(400, 200, 400), null, 100, earth_mat_id) });
+
+    // Perlin noise sphere
+    const perlin_tex = Texture.noise(0.2);
+    const perlin_tex_id = try world.add_texture(perlin_tex);
+    const perlin_material = Material.lambertian(perlin_tex_id);
+    const perlin_mat_id = try world.add_material(perlin_material);
+    _ = try world.add(.{ .Sphere = Sphere.init(init(220, 280, 300), null, 80, perlin_mat_id) });
+
+    // Cloud of white spheres (1000 small spheres in a box, rotated and translated)
+    const white_tex = Texture.solid_color(@Vector(3, f32){ 0.73, 0.73, 0.73 });
+    const white_tex_id = try world.add_texture(white_tex);
+    const white_mat = Material.lambertian(white_tex_id);
+    const white_mat_id = try world.add_material(white_mat);
+
+    const ns = 1000;
+    var k: usize = 0;
+    while (k < ns) : (k += 1) {
+        // Generate random position in 165x165x165 box
+        const random_pos = rtw.vec.random_vec_range(0, 165);
+
+        // Rotate around Y by 15 degrees
+        const angle_rad = std.math.degreesToRadians(15.0);
+        const cos_theta = @cos(angle_rad);
+        const sin_theta = @sin(angle_rad);
+        const rotated_pos = @Vector(3, f32){
+            cos_theta * random_pos[0] + sin_theta * random_pos[2],
+            random_pos[1],
+            -sin_theta * random_pos[0] + cos_theta * random_pos[2],
+        };
+
+        // Translate
+        const final_pos = rotated_pos + init(-100, 270, 395);
+
+        _ = try world.add(.{ .Sphere = Sphere.init(final_pos, null, 10, white_mat_id) });
+    }
+
+    // Build BVH
+    try world.buildBVH();
+
+    // Camera setup
+    var cam: Camera = undefined;
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 800;
+    cam.samples_per_pixel = 10000;
+    cam.max_depth = 40;
+    cam.background = @Vector(3, f32){ 0.0, 0.0, 0.0 };
+
+    cam.vfov = 40;
+    cam.lookfrom = @Vector(3, f32){ 478, 278, -600 };
+    cam.lookat = @Vector(3, f32){ 278, 278, 0 };
+    cam.vup = @Vector(3, f32){ 0, 1, 0 };
+    cam.defocus_angle = 0.0;
+    cam.focus_dist = 10.0;
+
+    try cam.render(&world);
+}
+
 pub fn draw_cornell_box() !void {
     const page = std.heap.page_allocator;
     var arena = std.heap.ArenaAllocator.init(page);
@@ -423,5 +566,6 @@ pub fn main() !void {
     //try draw_perlin_spheres();
     //try draw_quads();
     //try draw_simple_light();
-    try draw_cornell_box();
+    //try draw_cornell_box();
+    try draw_final_scene();
 }
