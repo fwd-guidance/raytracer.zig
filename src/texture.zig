@@ -82,7 +82,7 @@ pub const Image = struct {
         const i = @as(i32, @intFromFloat(clamped_u * @as(f32, @floatFromInt(self.image.width()))));
         const j = @as(i32, @intFromFloat(clamped_v * @as(f32, @floatFromInt(self.image.height()))));
 
-        const pixel = self.image.pixelData(i, j);
+        const pixel = self.image.pixel_data(i, j);
 
         const color_scale = 1.0 / 255.0;
         return @Vector(3, f32){

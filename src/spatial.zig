@@ -3,7 +3,7 @@ const math = @import("math.zig");
 const primitives = @import("primitives.zig");
 const scene = @import("scene.zig");
 
-const hit_record = scene.hit_record;
+const HitRecord = scene.HitRecord;
 const Primitive = primitives.Primitive;
 const Sphere = primitives.Sphere;
 const Ray = math.Ray;
@@ -28,7 +28,7 @@ pub const AABB = struct {
         return AABB.init(empty_interval, empty_interval, empty_interval);
     }
 
-    pub fn fromPoints(a: @Vector(3, f32), b: @Vector(3, f32)) AABB {
+    pub fn init_from_points(a: @Vector(3, f32), b: @Vector(3, f32)) AABB {
         // The bounding box containing both points
         const aabb = AABB{
             .x = Interval.init(@min(a[0], b[0]), @max(a[0], b[0])),
@@ -125,43 +125,43 @@ pub const BVHNode = struct {
     const Self = @This();
 
     // Construct a bounding volume hierarchy node from a range of hittables
-    pub fn initFromList(allocator: std.mem.Allocator, objects: []Primitive) !*BVHNode {
-        return try initFromSpan(allocator, objects, 0, objects.len);
+    pub fn init_from_list(allocator: std.mem.Allocator, objects: []Primitive) !*BVHNode {
+        return try init_from_span(allocator, objects, 0, objects.len);
     }
 
-    pub fn initFromSpan(allocator: std.mem.Allocator, objects: []Primitive, start: usize, end: usize) !*BVHNode {
+    pub fn init_from_span(allocator: std.mem.Allocator, objects: []Primitive, start: usize, end: usize) !*BVHNode {
         var node = try allocator.create(BVHNode);
 
         var span_bbox = AABB.empty();
         for (start..end) |i| {
-            span_bbox = AABB.merge(span_bbox, objects[i].boundingBox());
+            span_bbox = AABB.merge(span_bbox, objects[i].bounding_box());
         }
         const axis = span_bbox.longest_axis();
 
         const object_span = end - start;
 
         if (object_span == 1) {
-            node.left = try createHittableFromPrimitive(allocator, objects[start]);
+            node.left = try create_hittable_from_primitive(allocator, objects[start]);
             node.right = node.left;
         } else if (object_span == 2) {
-            if (boxCompare(objects[start], objects[start + 1], axis)) {
-                node.left = try createHittableFromPrimitive(allocator, objects[start]);
-                node.right = try createHittableFromPrimitive(allocator, objects[start + 1]);
+            if (box_compare(objects[start], objects[start + 1], axis)) {
+                node.left = try create_hittable_from_primitive(allocator, objects[start]);
+                node.right = try create_hittable_from_primitive(allocator, objects[start + 1]);
             } else {
-                node.left = try createHittableFromPrimitive(allocator, objects[start + 1]);
-                node.right = try createHittableFromPrimitive(allocator, objects[start]);
+                node.left = try create_hittable_from_primitive(allocator, objects[start + 1]);
+                node.right = try create_hittable_from_primitive(allocator, objects[start]);
             }
         } else {
-            sortPrimitivesByAxis(objects[start..end], axis);
+            sort_primitives_by_axis(objects[start..end], axis);
 
             const mid = start + object_span / 2;
 
-            node.left = try Hittable.createFromBVH(allocator, try initFromSpan(allocator, objects, start, mid));
-            node.right = try Hittable.createFromBVH(allocator, try initFromSpan(allocator, objects, mid, end));
+            node.left = try Hittable.create_from_bvh(allocator, try init_from_span(allocator, objects, start, mid));
+            node.right = try Hittable.create_from_bvh(allocator, try init_from_span(allocator, objects, mid, end));
         }
 
-        const box_left = getBoxForHittable(node.left);
-        const box_right = getBoxForHittable(node.right);
+        const box_left = get_box_for_hittable(node.left);
+        const box_right = get_box_for_hittable(node.right);
         node.bbox = AABB.merge(box_left, box_right);
         return node;
     }
@@ -174,7 +174,7 @@ pub const BVHNode = struct {
         allocator.destroy(self);
     }
 
-    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
         // If ray doesn't hit the bounding box, return false immediately
         if (!self.bbox.hit(r, ray_t)) {
             return false;
@@ -194,15 +194,15 @@ pub const BVHNode = struct {
         return (hit_left or hit_right);
     }
 
-    pub fn boundingBox(self: Self) AABB {
+    pub fn bounding_box(self: Self) AABB {
         return self.bbox;
     }
 };
 
 // Helper function to compare two spheres by a given axis
-fn boxCompare(a: Primitive, b: Primitive, axis: u8) bool {
-    const box_a = a.boundingBox();
-    const box_b = b.boundingBox();
+fn box_compare(a: Primitive, b: Primitive, axis: u8) bool {
+    const box_a = a.bounding_box();
+    const box_b = b.bounding_box();
 
     switch (axis) {
         0 => return box_a.x.min < box_b.x.min, // x-axis
@@ -213,11 +213,11 @@ fn boxCompare(a: Primitive, b: Primitive, axis: u8) bool {
 }
 
 // Helper function to sort spheres by a given axis
-fn sortPrimitivesByAxis(objects: []Primitive, axis: u8) void {
+fn sort_primitives_by_axis(objects: []Primitive, axis: u8) void {
     const Context = struct {
         axis: u8,
         pub fn lessThan(self: @This(), a: Primitive, b: Primitive) bool {
-            return boxCompare(a, b, self.axis);
+            return box_compare(a, b, self.axis);
         }
     };
 
@@ -227,17 +227,17 @@ fn sortPrimitivesByAxis(objects: []Primitive, axis: u8) void {
 }
 
 // Helper function to get the bounding box for a sphere
-fn getSphereBox(sphere: Sphere) AABB {
-    return sphere.boundingBox();
+fn get_sphere_box(sphere: Sphere) AABB {
+    return sphere.bounding_box();
 }
 
 // Helper to get the bounding box for a hittable
-fn getBoxForHittable(hittable: *Hittable) AABB {
-    return hittable.boundingBox();
+fn get_box_for_hittable(hittable: *Hittable) AABB {
+    return hittable.bounding_box();
 }
 
 // Helper to create a hittable from a sphere
-fn createHittableFromPrimitive(allocator: std.mem.Allocator, primitive: Primitive) !*Hittable {
+fn create_hittable_from_primitive(allocator: std.mem.Allocator, primitive: Primitive) !*Hittable {
     const hittable = try allocator.create(Hittable);
     hittable.* = Hittable{ .primitive = primitive };
     return hittable;
@@ -253,17 +253,17 @@ pub const Hittable = union(HittableType) {
     primitive: Primitive,
     bvh_node: *BVHNode,
 
-    pub fn hit(self: Hittable, r: Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Hittable, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
         return switch (self) {
             .primitive => |p| p.hit(&r, ray_t, rec),
             .bvh_node => |b| b.hit(r, ray_t, rec),
         };
     }
 
-    pub fn boundingBox(self: Hittable) AABB {
+    pub fn bounding_box(self: Hittable) AABB {
         return switch (self) {
-            .primitive => |p| p.boundingBox(),
-            .bvh_node => |b| b.boundingBox(),
+            .primitive => |p| p.bounding_box(),
+            .bvh_node => |b| b.bounding_box(),
         };
     }
 
@@ -275,7 +275,7 @@ pub const Hittable = union(HittableType) {
         allocator.destroy(self);
     }
 
-    pub fn createFromBVH(allocator: std.mem.Allocator, node: *BVHNode) !*Hittable {
+    pub fn create_from_bvh(allocator: std.mem.Allocator, node: *BVHNode) !*Hittable {
         const hittable = try allocator.create(Hittable);
         hittable.* = Hittable{ .bvh_node = node };
         return hittable;

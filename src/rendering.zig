@@ -4,7 +4,7 @@ const utils = @import("utils.zig");
 
 const hittable_list = scene.HittableList;
 const Ray = math.Ray;
-const hit_record = scene.hit_record;
+const HitRecord = scene.HitRecord;
 const std = @import("std");
 const Thread = std.Thread;
 const Mutex = std.Thread.Mutex;
@@ -221,7 +221,7 @@ pub const Camera = struct {
         // If we've exceeded the ray bounce limit, no more light is gathered
         if (depth <= 0) return math.init(0, 0, 0);
 
-        var rec: hit_record = undefined;
+        var rec: HitRecord = undefined;
         const hit_result = world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec);
 
         // If the ray hits nothing, return the background color
@@ -275,7 +275,7 @@ pub fn linear_to_gamma(linear_component: f32) f32 {
     if (linear_component > 0) return @sqrt(linear_component) else return 0;
 }
 
-inline fn writeU8(writer: anytype, value: u8) !void {
+inline fn write_u8(writer: anytype, value: u8) !void {
     if (value >= 100) {
         try writer.writeByte('0' + value / 100);
     }
@@ -295,10 +295,10 @@ pub fn write_color(writer: anytype, pixel_color: @Vector(3, f32)) !void {
     const gbyte = @as(u8, @intFromFloat(256 * intensity.clamp(g)));
     const bbyte = @as(u8, @intFromFloat(256 * intensity.clamp(b)));
 
-    try writeU8(writer, rbyte);
+    try write_u8(writer, rbyte);
     try writer.writeByte(' ');
-    try writeU8(writer, gbyte);
+    try write_u8(writer, gbyte);
     try writer.writeByte(' ');
-    try writeU8(writer, bbyte);
+    try write_u8(writer, bbyte);
     try writer.writeByte('\n');
 }

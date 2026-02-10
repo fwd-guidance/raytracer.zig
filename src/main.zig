@@ -147,7 +147,7 @@ pub fn draw_final_scene() !void {
     }
 
     // Build BVH
-    try world.buildBVH();
+    try world.build_bvh();
 
     // Camera setup
     var cam: Camera = undefined;
@@ -232,7 +232,7 @@ pub fn draw_cornell_box() !void {
         white_smoke_tex_id, &world);
     _ = try world.add(.{ .ConstantMedium = box2_smoke });
 
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 1.0;
@@ -275,7 +275,7 @@ pub fn draw_simple_light() !void {
     _ = try world.add(.{ .Quad = Quad.init(init(3, 1, -2), init(2, 0, 0), init(0, 2, 0), difflight_id) });
 
     _ = try world.add(.{ .Sphere = Sphere.init(init(0, 7, 0), null, 2, difflight_id) });
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
@@ -334,7 +334,7 @@ pub fn draw_quads() !void {
     _ = try world.add(.{ .Quad = Quad.init(init(-2, 3, 1), init(4, 0, 0), init(0, 0, 4), orange_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(-2, -3, 5), init(4, 0, 0), init(0, 0, -4), teal_id) });
 
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 1.0;
@@ -374,7 +374,7 @@ pub fn draw_perlin_spheres() !void {
     _ = try world.add(.{ .Sphere = Sphere.init(init(0, -1000, 0), null, 1000, perlin_material_id) });
     _ = try world.add(.{ .Sphere = Sphere.init(init(0, 2, 0), null, 2, perlin_material_id) });
 
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
@@ -419,7 +419,7 @@ pub fn draw_checkered_spheres() !void {
     _ = try world.add(.{ .Sphere = Sphere.init(init(0, -10, 0), null, 10, ground_id) });
     _ = try world.add(.{ .Sphere = Sphere.init(init(0, 10, 0), null, 10, ground_id) });
 
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
@@ -461,7 +461,7 @@ pub fn draw_earth() !void {
 
     _ = try world.add(.{ .Sphere = Sphere.init(init(0, 0, 0), null, 2.0, earth_mat_id) });
 
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;
@@ -547,7 +547,7 @@ pub fn draw_ppm() !void {
     _ = try world.add(.{ .Sphere = Sphere.init(init(4, 1, 0), null, 1.0, material3_id) });
     _ = try world.add(.{ .Sphere = Sphere.init(init(0.0, -1000, 0), null, 1000, ground_id) });
 
-    try world.buildBVH();
+    try world.build_bvh();
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 16.0 / 9.0;

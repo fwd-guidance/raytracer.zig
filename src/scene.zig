@@ -23,7 +23,7 @@ const Translate = p.Translate;
 const RotateY = p.RotateY;
 const ConstantMedium = p.ConstantMedium;
 
-pub const hit_record = struct {
+pub const HitRecord = struct {
     p: @Vector(3, f32),
     t: f32,
     u: f32,
@@ -158,7 +158,7 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *hit_record) !bool {
+    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) !bool {
         // Use BVH if available
         if (self.bvh_root != null) {
             return self.bvh_root.?.hit(r, ray_t, rec);
@@ -295,26 +295,26 @@ pub const HittableList = struct {
         return hit_anything;
     }
 
-    pub fn boundingBox(self: Self) AABB {
+    pub fn bounding_box(self: Self) AABB {
         if (self.objects.len == 0) {
             return AABB.empty();
         }
 
         // If BVH exists, use its bounding box
         if (self.bvh_root != null) {
-            return self.bvh_root.?.boundingBox();
+            return self.bvh_root.?.bounding_box();
         }
 
         var output_box = AABB.empty();
 
         for (0..self.objects.len) |i| {
             const sphere = self.objects.get(i);
-            output_box = AABB.merge(output_box, sphere.boundingBox());
+            output_box = AABB.merge(output_box, sphere.bounding_box());
         }
         return output_box;
     }
 
-    pub fn buildBVH(self: *Self) !void {
+    pub fn build_bvh(self: *Self) !void {
         if (self.bvh_root != null) {
             self.bvh_root.?.deinit(self.allocator);
             self.bvh_root = null;
@@ -362,7 +362,7 @@ pub const HittableList = struct {
         }
 
         // Build BVH from the combined list
-        const bvh_node = try BVHNode.initFromList(self.allocator, primitives);
-        self.bvh_root = try Hittable.createFromBVH(self.allocator, bvh_node);
+        const bvh_node = try BVHNode.init_from_list(self.allocator, primitives);
+        self.bvh_root = try Hittable.create_from_bvh(self.allocator, bvh_node);
     }
 };

@@ -9,7 +9,7 @@ const Ray = math.Ray;
 const Interval = math.Interval;
 const AABB = spatial.AABB;
 const HittableList = scene.HittableList;
-const hit_record = scene.hit_record;
+const HitRecord = scene.HitRecord;
 
 pub const Primitive = union(enum) {
     Sphere: Sphere,
@@ -19,7 +19,7 @@ pub const Primitive = union(enum) {
     RotateY: RotateY,
     ConstantMedium: ConstantMedium,
 
-    pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         switch (self) {
             .Sphere => |s| return s.hit(r, ray_t, rec),
             .Quad => |q| return q.hit(r, ray_t, rec),
@@ -30,7 +30,7 @@ pub const Primitive = union(enum) {
         }
     }
 
-    pub fn boundingBox(self: Primitive) AABB {
+    pub fn bounding_box(self: Primitive) AABB {
         switch (self) {
             .Sphere => |s| return s.bounding_box(),
             .Quad => |q| return q.bounding_box(),
@@ -55,13 +55,13 @@ pub const Sphere = struct {
 
     pub fn init(center: @Vector(3, f32), center_two: ?@Vector(3, f32), radius: f32, mat_id: usize) Self {
         const radius_vec = math.init(radius, radius, radius);
-        var bbox = AABB.fromPoints(center - radius_vec, center + radius_vec);
+        var bbox = AABB.init_from_points(center - radius_vec, center + radius_vec);
         var center_ray = Ray.init(center, math.init(0, 0, 0), null);
 
         if (center_two != null) {
             center_ray = Ray.init(center, center_two.? - center, null);
-            const box1 = AABB.fromPoints(center_ray.position(0) - radius_vec, center_ray.position(0) + radius_vec);
-            const box2 = AABB.fromPoints(center_ray.position(1) - radius_vec, center_ray.position(1) + radius_vec);
+            const box1 = AABB.init_from_points(center_ray.position(0) - radius_vec, center_ray.position(0) + radius_vec);
+            const box2 = AABB.init_from_points(center_ray.position(1) - radius_vec, center_ray.position(1) + radius_vec);
             bbox = AABB.merge(box1, box2);
         }
 
@@ -78,13 +78,13 @@ pub const Sphere = struct {
 
     fn init_moving_bbox(center: Ray, radius: f32) AABB {
         const radius_vec = math.init(radius, radius, radius);
-        const box1 = AABB.fromPoints(center.position(0) - radius_vec, center.position(0) + radius_vec);
-        const box2 = AABB.fromPoints(center.position(1) - radius_vec, center.position(1) + radius_vec);
+        const box1 = AABB.init_from_points(center.position(0) - radius_vec, center.position(0) + radius_vec);
+        const box2 = AABB.init_from_points(center.position(1) - radius_vec, center.position(1) + radius_vec);
         const bbox = AABB.merge(box1, box2);
         return bbox;
     }
 
-    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         // NOTE: a little sus of this "optimization" of hoisting field accesses. feels like something the compiler would handle itself
         const ray_origin = r.origin;
         const ray_dir = r.direction;
@@ -128,7 +128,7 @@ pub const Sphere = struct {
         return true;
     }
 
-    pub fn get_sphere_uv(p: @Vector(3, f32), rec: *hit_record) void {
+    pub fn get_sphere_uv(p: @Vector(3, f32), rec: *HitRecord) void {
         // TODO: ideally this fn would be able to easily rotate an img by an arbitrary amount from the caller.
         //      like, being able to view any part of the earthmap vs being forced to see the americas.
         const theta = std.math.acos(-p[1]);
@@ -148,12 +148,12 @@ pub const Sphere = struct {
 
         if (self.moving) {
             // For moving spheres, create bounding box that encompasses both positions
-            const box1 = AABB.fromPoints(self.center.origin - r_vec, self.center.origin + r_vec);
-            const box2 = AABB.fromPoints(self.center.position(1.0) - r_vec, self.center.position(1.0) + r_vec);
+            const box1 = AABB.init_from_points(self.center.origin - r_vec, self.center.origin + r_vec);
+            const box2 = AABB.init_from_points(self.center.position(1.0) - r_vec, self.center.position(1.0) + r_vec);
             return AABB.merge(box1, box2);
         } else {
             // For static spheres
-            return AABB.fromPoints(self.center.origin - r_vec, self.center.origin + r_vec);
+            return AABB.init_from_points(self.center.origin - r_vec, self.center.origin + r_vec);
         }
     }
 };
@@ -185,8 +185,8 @@ pub const Quad = struct {
     }
 
     pub fn set_bounding_box(Q: @Vector(3, f32), u: @Vector(3, f32), v: @Vector(3, f32)) AABB {
-        const bbox_diagonal1 = AABB.fromPoints(Q, Q + u + v);
-        const bbox_diagonal2 = AABB.fromPoints(Q + u, Q + v);
+        const bbox_diagonal1 = AABB.init_from_points(Q, Q + u + v);
+        const bbox_diagonal2 = AABB.init_from_points(Q + u, Q + v);
         return AABB.merge(bbox_diagonal1, bbox_diagonal2);
     }
 
@@ -194,7 +194,7 @@ pub const Quad = struct {
         return self.bbox;
     }
 
-    pub fn hit(self: Quad, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Quad, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         const denom = math.dot(self.normal, r.*.direction);
         // bounds check unnecessary?
         if (@abs(denom) < 1e-8) return false;
@@ -217,7 +217,7 @@ pub const Quad = struct {
         return true;
     }
 
-    pub fn is_interior(a: f32, b: f32, rec: *hit_record) bool {
+    pub fn is_interior(a: f32, b: f32, rec: *HitRecord) bool {
         const unit_interval = Interval.init(0, 1);
 
         if (!unit_interval.contains(a) or !unit_interval.contains(b)) return false;
@@ -266,7 +266,7 @@ pub const Box = struct {
 
         return Self{
             .quads = quads,
-            .bbox = AABB.fromPoints(min, max),
+            .bbox = AABB.init_from_points(min, max),
             .allocator = allocator,
         };
     }
@@ -282,7 +282,7 @@ pub const Box = struct {
         }
     }
 
-    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         var hit_anything = false;
         var closest_so_far = ray_t.max;
 
@@ -333,9 +333,9 @@ pub const ConstantMedium = struct {
         self.allocator.destroy(self.boundary);
     }
 
-    pub fn hit(self: ConstantMedium, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
-        var rec1: hit_record = undefined;
-        var rec2: hit_record = undefined;
+    pub fn hit(self: ConstantMedium, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+        var rec1: HitRecord = undefined;
+        var rec2: HitRecord = undefined;
 
         // Check if ray hits boundary at all
         if (!self.boundary.hit(r, Interval.universe(), &rec1)) {
@@ -378,7 +378,7 @@ pub const ConstantMedium = struct {
     }
 
     pub fn bounding_box(self: ConstantMedium) AABB {
-        return self.boundary.boundingBox();
+        return self.boundary.bounding_box();
     }
 };
 
@@ -392,7 +392,7 @@ pub const Translate = struct {
         const obj_ptr = try allocator.create(Primitive);
         obj_ptr.* = primitive;
 
-        const obj_bbox = primitive.boundingBox();
+        const obj_bbox = primitive.bounding_box();
         const bbox = obj_bbox.add(offset);
         return .{
             .primitive = obj_ptr,
@@ -412,7 +412,7 @@ pub const Translate = struct {
         self.allocator.destroy(self.primitive);
     }
 
-    pub fn hit(self: Translate, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: Translate, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         const offset_r: Ray = Ray.init(r.*.origin - self.offset, r.*.direction, r.*.tm);
 
         if (!self.primitive.hit(&offset_r, ray_t, rec)) {
@@ -444,7 +444,7 @@ pub const RotateY = struct {
         const sin_theta = @sin(radians);
         const cos_theta = @cos(radians);
 
-        const prim_bbox = primitive.boundingBox();
+        const prim_bbox = primitive.bounding_box();
         var min = @Vector(3, f32){ std.math.inf(f32), std.math.inf(f32), std.math.inf(f32) };
         var max = @Vector(3, f32){ -std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32) };
 
@@ -479,7 +479,7 @@ pub const RotateY = struct {
             }
         }
 
-        const bbox = AABB.fromPoints(min, max);
+        const bbox = AABB.init_from_points(min, max);
         return .{
             .primitive = obj_ptr,
             .sin_theta = sin_theta,
@@ -499,7 +499,7 @@ pub const RotateY = struct {
         self.allocator.destroy(self.primitive);
     }
 
-    pub fn hit(self: RotateY, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
+    pub fn hit(self: RotateY, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         const origin = @Vector(3, f32){ self.cos_theta * r.origin[0] - self.sin_theta * r.origin[2], r.origin[1], self.sin_theta * r.origin[0] + self.cos_theta * r.origin[2] };
         const direction = @Vector(3, f32){ self.cos_theta * r.*.direction[0] - self.sin_theta * r.*.direction[2], r.*.direction[1], self.sin_theta * r.*.direction[0] + self.cos_theta * r.*.direction[2] };
 

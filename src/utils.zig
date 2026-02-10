@@ -29,7 +29,7 @@ const thread_local = struct {
 
 /// Lazy one-time seed per thread.  Reads a single u64 from the OS CSPRNG;
 /// Xoroshiro128.init() expands it via SplitMix64 internally.
-fn ensureSeeded() void {
+fn ensure_seeded() void {
     if (!thread_local.seeded) {
         var seed: u64 = undefined;
         std.crypto.random.bytes(@as(*[8]u8, @ptrCast(&seed)));
@@ -45,7 +45,7 @@ fn ensureSeeded() void {
 /// interface does internally anyway: take the top 24 bits (f32 mantissa width)
 /// and divide by 2^24.
 pub fn random_double() f32 {
-    ensureSeeded();
+    ensure_seeded();
     return @as(f32, @floatFromInt(thread_local.prng.next() >> 40)) * (1.0 / 16777216.0);
 }
 
@@ -281,7 +281,7 @@ pub const RTWImage = struct {
         if (self.fdata == null) return false;
 
         self.bytes_per_scanline = self.image_width * self.bytes_per_pixel;
-        self.convertToBytes() catch return false;
+        self.convert_to_bytes() catch return false;
         return true;
     }
 
@@ -293,7 +293,7 @@ pub const RTWImage = struct {
         return if (self.fdata == null) 0 else self.image_height;
     }
 
-    pub fn pixelData(self: RTWImage, x: i32, y: i32) [*]const u8 {
+    pub fn pixel_data(self: RTWImage, x: i32, y: i32) [*]const u8 {
         // Return the address of the three RGB bytes of the pixel at x,y.
         // If there is no image data, returns red.
         if (self.bdata == null) return &red;
@@ -312,13 +312,13 @@ pub const RTWImage = struct {
         return high - 1;
     }
 
-    fn floatToByte(value: f32) u8 {
+    fn float_to_byte(value: f32) u8 {
         if (value <= 0.0) return 0;
         if (value >= 1.0) return 255;
         return @intFromFloat(256.0 * value);
     }
 
-    fn convertToBytes(self: *RTWImage) !void {
+    fn convert_to_bytes(self: *RTWImage) !void {
         // Convert the linear floating point pixel data to bytes
         const total_bytes = @as(usize, @intCast(self.image_width * self.image_height * self.bytes_per_pixel));
 
@@ -328,7 +328,7 @@ pub const RTWImage = struct {
         // to unsigned [0, 255] byte values
         var i: usize = 0;
         while (i < total_bytes) : (i += 1) {
-            byte_data[i] = floatToByte(self.fdata.?[i]);
+            byte_data[i] = float_to_byte(self.fdata.?[i]);
         }
 
         self.bdata = byte_data;
