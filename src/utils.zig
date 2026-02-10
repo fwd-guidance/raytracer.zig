@@ -22,7 +22,7 @@ const std = @import("std");
 //     which already guarantees a non-zero state.
 // ---------------------------------------------------------------------------
 
-const thread_local = struct {
+const ThreadLocal = struct {
     threadlocal var prng: std.Random.Xoroshiro128 = undefined;
     threadlocal var seeded: bool = false;
 };
@@ -30,11 +30,11 @@ const thread_local = struct {
 /// Lazy one-time seed per thread.  Reads a single u64 from the OS CSPRNG;
 /// Xoroshiro128.init() expands it via SplitMix64 internally.
 fn ensure_seeded() void {
-    if (!thread_local.seeded) {
+    if (!ThreadLocal.seeded) {
         var seed: u64 = undefined;
         std.crypto.random.bytes(@as(*[8]u8, @ptrCast(&seed)));
-        thread_local.prng = std.Random.Xoroshiro128.init(seed);
-        thread_local.seeded = true;
+        ThreadLocal.prng = std.Random.Xoroshiro128.init(seed);
+        ThreadLocal.seeded = true;
     }
 }
 
@@ -46,7 +46,7 @@ fn ensure_seeded() void {
 /// and divide by 2^24.
 pub fn random_double() f32 {
     ensure_seeded();
-    return @as(f32, @floatFromInt(thread_local.prng.next() >> 40)) * (1.0 / 16777216.0);
+    return @as(f32, @floatFromInt(ThreadLocal.prng.next() >> 40)) * (1.0 / 16777216.0);
 }
 
 pub fn random_double_range(min: f32, max: f32) f32 {
