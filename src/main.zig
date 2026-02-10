@@ -167,7 +167,7 @@ pub fn draw_final_scene() !void {
     try cam.render(&world);
 }
 
-pub fn draw_cornell_box() !void {
+pub fn draw_smoke_cornell_box() !void {
     const page = std.heap.page_allocator;
     var arena = std.heap.ArenaAllocator.init(page);
     defer arena.deinit();
@@ -231,6 +231,74 @@ pub fn draw_cornell_box() !void {
     const box2_smoke = try ConstantMedium.init(allocator, .{ .Translate = box2_final }, 0.01, // Same density
         white_smoke_tex_id, &world);
     _ = try world.add(.{ .ConstantMedium = box2_smoke });
+
+    try world.build_bvh();
+
+    var cam: Camera = undefined;
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 800;
+    cam.samples_per_pixel = 500;
+    cam.max_depth = 50;
+
+    cam.vfov = 40;
+    cam.lookfrom = @Vector(3, f32){ 278, 278, -800 };
+    cam.lookat = @Vector(3, f32){ 278, 278, 0 };
+    cam.background = @Vector(3, f32){ 0.0, 0.0, 0.0 };
+    cam.vup = @Vector(3, f32){ 0, 1, 0 };
+    cam.defocus_angle = 0.0;
+    cam.focus_dist = 10.0;
+
+    try cam.render(&world);
+}
+
+pub fn draw_cornell_box() !void {
+    const page = std.heap.page_allocator;
+    var arena = std.heap.ArenaAllocator.init(page);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var world = HittableList.init(allocator);
+    defer world.deinit();
+
+    const red_tex = Texture.solid_color(@Vector(3, f32){ 0.65, 0.05, 0.05 });
+    const red_tex_id = try world.add_texture(red_tex);
+    const red = Material.lambertian(red_tex_id);
+    const red_id = try world.add_material(red);
+
+    const green_tex = Texture.solid_color(@Vector(3, f32){ 0.12, 0.45, 0.15 });
+    const green_tex_id = try world.add_texture(green_tex);
+    const green = Material.lambertian(green_tex_id);
+    const green_id = try world.add_material(green);
+
+    const white_tex = Texture.solid_color(@Vector(3, f32){ 0.73, 0.73, 0.73 });
+    const white_tex_id = try world.add_texture(white_tex);
+    const white = Material.lambertian(white_tex_id);
+    const white_id = try world.add_material(white);
+
+    const light_tex = Texture.solid_color(@Vector(3, f32){ 7, 7, 7 });
+    const light_tex_id = try world.add_texture(light_tex);
+    const difflight = Material.diffuse_light(light_tex_id);
+    const difflight_id = try world.add_material(difflight);
+
+    _ = try world.add(.{ .Quad = Quad.init(init(555, 0, 0), init(0, 555, 0), init(0, 0, 555), green_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(0, 555, 0), init(0, 0, 555), red_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(113, 554, 127), init(330, 0, 0), init(0, 0, 305), difflight_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(555, 0, 0), init(0, 0, 555), white_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(555, 555, 555), init(-555, 0, 0), init(0, 0, -555), white_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(555, 0, 0), init(0, 555, 0), white_id) });
+
+    const box1 = try Box.init(allocator, init(0, 0, 0), init(165, 330, 165), white_id);
+    const box1_rotated = try RotateY.init(allocator, .{ .Box = box1 }, 15.0);
+    const box1_final = try Translate.init(allocator, .{ .RotateY = box1_rotated }, init(265, 0, 295));
+
+    _ = try world.add(.{ .Translate = box1_final });
+
+    // Second box: rotated, translated, then made into white smoke
+    const box2 = try Box.init(allocator, init(0, 0, 0), init(165, 165, 165), white_id);
+    const box2_rotated = try RotateY.init(allocator, .{ .Box = box2 }, -18.0);
+    const box2_final = try Translate.init(allocator, .{ .RotateY = box2_rotated }, init(130, 0, 65));
+
+    _ = try world.add(.{ .Translate = box2_final });
 
     try world.build_bvh();
 
@@ -573,6 +641,7 @@ pub fn main() !void {
     //try draw_perlin_spheres();
     //try draw_quads();
     //try draw_simple_light();
-    //try draw_cornell_box();
-    try draw_final_scene();
+    try draw_cornell_box();
+    //try draw_smoke_cornell_box();
+    //try draw_final_scene();
 }
