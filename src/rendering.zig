@@ -39,6 +39,8 @@ pub const Camera = struct {
     mutex: Mutex,
     num_threads: usize,
     background: @Vector(3, f32),
+    sqrt_samples_per_pixel: u32,
+    recip_sqrt_samples_per_pixel: f32,
     const Self = @This();
 
     pub fn initialize(self: *Self) void {
@@ -46,7 +48,10 @@ pub const Camera = struct {
         const h_f = @as(f32, @floatFromInt(@max(1, @as(u32, @intFromFloat(w_f / self.aspect_ratio)))));
         self.image_height = @as(u32, @intFromFloat(h_f));
 
-        self.pixel_samples_scale = 1.0 / @as(f32, @floatFromInt(self.samples_per_pixel));
+        self.sqrt_samples_per_pixel = @as(u32, @intFromFloat(@sqrt(@as(f32, @floatFromInt(self.samples_per_pixel)))));
+        self.pixel_samples_scale = 1.0 / @as(f32, @floatFromInt(self.sqrt_samples_per_pixel * self.sqrt_samples_per_pixel));
+        self.recip_sqrt_samples_per_pixel = 1.0 / @as(f32, @floatFromInt(self.sqrt_samples_per_pixel));
+
         self.center = self.lookfrom;
 
         const theta = std.math.degreesToRadians(self.vfov);
@@ -129,11 +134,20 @@ pub const Camera = struct {
                     while (i < cam_width) : (i += 1) {
                         var pixel_color = math.init(0, 0, 0);
 
-                        var sample: u32 = 0;
-                        while (sample < camera.samples_per_pixel) : (sample += 1) {
-                            const r: Ray = get_ray(camera, i, j);
-                            pixel_color += ray_color(camera, r, camera.max_depth, world_objects);
+                        var s_j: u32 = 0;
+                        while (s_j < camera.sqrt_samples_per_pixel) : (s_j += 1) {
+                            var s_i: u32 = 0;
+                            while (s_i < camera.sqrt_samples_per_pixel) : (s_i += 1) {
+                                const r: Ray = get_ray(camera, i, j, s_i, s_j);
+                                pixel_color += ray_color(camera, r, camera.max_depth, world_objects);
+                            }
                         }
+
+                        //var sample: u32 = 0;
+                        //while (sample < camera.samples_per_pixel) : (sample += 1) {
+                        //    const r: Ray = get_ray(camera, i, j);
+                        //    pixel_color += ray_color(camera, r, camera.max_depth, world_objects);
+                        //}
 
                         const buffer_index = @as(usize, j) * @as(usize, cam_width) + @as(usize, i);
                         context.buffer.items[buffer_index] = math.scale(pixel_color, camera.pixel_samples_scale);
@@ -191,8 +205,8 @@ pub const Camera = struct {
 
     /// Construct a camera ray for pixel (i, j) with a random sub-pixel offset.
     /// Uses integer pixel coords and splat for broadcasting.
-    fn get_ray(self: *Self, i: u32, j: u32) Ray {
-        const offset: @Vector(3, f32) = sample_square();
+    fn get_ray(self: *Self, i: u32, j: u32, s_i: u32, s_j: u32) Ray {
+        const offset: @Vector(3, f32) = sample_square_stratified(self, s_i, s_j);
         const fi = @as(f32, @floatFromInt(i));
         const fj = @as(f32, @floatFromInt(j));
         const pixel_sample: @Vector(3, f32) =
@@ -204,6 +218,12 @@ pub const Camera = struct {
         const ray_time: f32 = random_double();
 
         return Ray.init(ray_origin, ray_direction, ray_time);
+    }
+
+    fn sample_square_stratified(self: *Self, s_i: u32, s_j: u32) @Vector(3, f32) {
+        const px = ((@as(f32, @floatFromInt(s_i)) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
+        const py = ((@as(f32, @floatFromInt(s_j)) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
+        return @Vector(3, f32){ px, py, 0 };
     }
 
     fn sample_square() @Vector(3, f32) {
