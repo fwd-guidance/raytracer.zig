@@ -1,21 +1,28 @@
-const rtw = @import("rtweekend.zig");
-const RTWImage = @import("rtw_stb_image.zig").RTWImage;
-const std = rtw.std;
-
-const Primitive = rtw.HittableList.Primitive;
-const Sphere = rtw.sphere.Sphere;
-const Quad = @import("quad.zig").Quad;
-const Box = @import("box.zig").Box;
-const RotateY = @import("instance.zig").RotateY;
-const Translate = @import("instance.zig").Translate;
-const HittableList = rtw.HittableList.HittableList;
-const Camera = rtw.camera.Camera;
-const Material = rtw.material.Material;
+const std = @import("std");
+const p = @import("primitives.zig");
+const math = @import("math.zig");
+const utils = @import("utils.zig");
+const rendering = @import("rendering.zig");
+const scene = @import("scene.zig");
+const Material = @import("material.zig").Material;
 const Texture = @import("texture.zig").Texture;
-const init = rtw.vec.init;
-const hittable_list = rtw.HittableList.HittableList;
-const Perlin = @import("perlin.zig").Perlin;
-const ConstantMedium = @import("constant_medium.zig").ConstantMedium;
+
+const Primitive = p.Primitive;
+const Sphere = p.Sphere;
+const Quad = p.Quad;
+const Box = p.Box;
+const RotateY = p.RotateY;
+const Translate = p.Translate;
+const ConstantMedium = p.ConstantMedium;
+
+const HittableList = scene.HittableList;
+
+const Camera = rendering.Camera;
+
+const init = math.init;
+
+const RTWImage = utils.RTWImage;
+const Perlin = utils.Perlin;
 
 pub fn draw_final_scene() !void {
     const page = std.heap.page_allocator;
@@ -23,7 +30,7 @@ pub fn draw_final_scene() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     // Ground material
@@ -45,7 +52,7 @@ pub fn draw_final_scene() !void {
             const z0 = -1000.0 + fj * w;
             const y0: f32 = 0.0;
             const x1 = x0 + w;
-            const y1 = rtw.random_double_range(1, 101);
+            const y1 = utils.random_double_range(1, 101);
             const z1 = z0 + w;
 
             //_ = try world.add_box(init(x0, y0, z0), init(x1, y1, z1), ground_id);
@@ -121,7 +128,7 @@ pub fn draw_final_scene() !void {
     var k: usize = 0;
     while (k < ns) : (k += 1) {
         // Generate random position in 165x165x165 box
-        const random_pos = rtw.vec.random_vec_range(0, 165);
+        const random_pos = math.random_vec_range(0, 165);
 
         // Rotate around Y by 15 degrees
         const angle_rad = std.math.degreesToRadians(15.0);
@@ -146,7 +153,7 @@ pub fn draw_final_scene() !void {
     var cam: Camera = undefined;
     cam.aspect_ratio = 1.0;
     cam.image_width = 800;
-    cam.samples_per_pixel = 10000;
+    cam.samples_per_pixel = 100;
     cam.max_depth = 40;
     cam.background = @Vector(3, f32){ 0.0, 0.0, 0.0 };
 
@@ -166,7 +173,7 @@ pub fn draw_cornell_box() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     const red_tex = Texture.solid_color(@Vector(3, f32){ 0.65, 0.05, 0.05 });
@@ -250,7 +257,7 @@ pub fn draw_simple_light() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     const noise_tex = Texture.noise(4);
@@ -293,7 +300,7 @@ pub fn draw_quads() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     const red_tex = Texture.solid_color(@Vector(3, f32){ 1.0, 0.2, 0.2 });
@@ -356,7 +363,7 @@ pub fn draw_perlin_spheres() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     const noise_tex = Texture.noise(4);
@@ -392,7 +399,7 @@ pub fn draw_checkered_spheres() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     //const material_ground = Material.lambertian(@Vector(3, f32){ 0.5, 0.5, 0.5 });
@@ -437,7 +444,7 @@ pub fn draw_earth() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     // Load an image
@@ -479,7 +486,7 @@ pub fn draw_ppm() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var world = hittable_list.init(allocator);
+    var world = HittableList.init(allocator);
     defer world.deinit();
 
     // create white and green checker texture
@@ -507,12 +514,12 @@ pub fn draw_ppm() !void {
     while (a < 11) : (a += 1) {
         var b: f32 = -11;
         while (b < 11) : (b += 1) {
-            const choose_mat = rtw.random_double();
-            const center: @Vector(3, f32) = @Vector(3, f32){ a + 0.9 * rtw.random_double(), 0.2, b + 0.9 * rtw.random_double() };
-            if (rtw.vec.magnitude(center - @Vector(3, f32){ 4.0, 0.2, 0.0 }) > 0.9) {
+            const choose_mat = utils.random_double();
+            const center: @Vector(3, f32) = @Vector(3, f32){ a + 0.9 * utils.random_double(), 0.2, b + 0.9 * utils.random_double() };
+            if (math.magnitude(center - @Vector(3, f32){ 4.0, 0.2, 0.0 }) > 0.9) {
                 if (choose_mat < 0.8) {
                     //const center_two = center + init(0, rtw.random_double_range(0, 0.5), 0);
-                    const albedo = (rtw.vec.random_vec_range(0.0, 1.0) * rtw.vec.random_vec_range(0.0, 1.0));
+                    const albedo = (math.random_vec_range(0.0, 1.0) * math.random_vec_range(0.0, 1.0));
 
                     const sphere_tex = Texture.solid_color(albedo);
                     const sphere_tex_id = try world.add_texture(sphere_tex);
@@ -521,8 +528,8 @@ pub fn draw_ppm() !void {
                     const sphere_material_id = try world.add_material(sphere_material);
                     _ = try world.add(.{ .Sphere = Sphere.init(center, null, 0.2, sphere_material_id) });
                 } else if (choose_mat < 0.95) {
-                    const albedo = rtw.vec.random_vec_range(0.5, 1.0);
-                    const fuzz = rtw.random_double_range(0, 0.5);
+                    const albedo = math.random_vec_range(0.5, 1.0);
+                    const fuzz = utils.random_double_range(0, 0.5);
                     const sphere_material = Material.metal(albedo, fuzz);
                     const sphere_material_id = try world.add_material(sphere_material);
                     _ = try world.add(.{ .Sphere = Sphere.init(center, null, 0.2, sphere_material_id) });

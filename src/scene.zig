@@ -1,53 +1,44 @@
-const rtw = @import("rtweekend.zig");
-
-const Interval = rtw.interval.Interval;
-const std = rtw.std;
-const Ray = rtw.ray.Ray;
-const hit_record = rtw.hittable.hit_record;
-const Sphere = rtw.sphere.Sphere;
-const Quad = @import("quad.zig").Quad;
-const Box = @import("box.zig").Box;
-const Translate = @import("instance.zig").Translate;
-const RotateY = @import("instance.zig").RotateY;
-const ConstantMedium = @import("constant_medium.zig").ConstantMedium;
-const Material = rtw.material.Material;
+const std = @import("std");
+const math = @import("math.zig");
+const p = @import("primitives.zig");
+const Material = @import("material.zig").Material;
 const Texture = @import("texture.zig").Texture;
-const RTWImage = @import("rtw_stb_image.zig").RTWImage;
-const ArrayList = std.ArrayList;
+const utils = @import("utils.zig");
+const spatial = @import("spatial.zig");
+
+const Hittable = spatial.Hittable;
+const AABB = spatial.AABB;
+const BVHNode = spatial.BVHNode;
+const Primitive = p.Primitive;
+const Interval = math.Interval;
+const RTWImage = utils.RTWImage;
+
+const Ray = math.Ray;
 const MultiArrayList = std.MultiArrayList;
-const AABB = @import("aabb.zig").AABB;
-const BVHNode = @import("bvh.zig").BVHNode;
-const Hittable = @import("bvh.zig").Hittable;
-const vec = @import("vec.zig");
+const ArrayList = std.ArrayList;
+const Sphere = p.Sphere;
+const Box = p.Box;
+const Quad = p.Quad;
+const Translate = p.Translate;
+const RotateY = p.RotateY;
+const ConstantMedium = p.ConstantMedium;
 
-pub const Primitive = union(enum) {
-    Sphere: Sphere,
-    Quad: Quad,
-    Box: Box,
-    Translate: Translate,
-    RotateY: RotateY,
-    ConstantMedium: ConstantMedium,
+pub const hit_record = struct {
+    p: @Vector(3, f32),
+    t: f32,
+    u: f32,
+    v: f32,
+    mat_id: usize,
+    normal: @Vector(3, f32),
+    front_face: bool,
+    const Self = @This();
 
-    pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *hit_record) bool {
-        switch (self) {
-            .Sphere => |s| return s.hit(r, ray_t, rec),
-            .Quad => |q| return q.hit(r, ray_t, rec),
-            .Box => |b| return b.hit(r, ray_t, rec),
-            .Translate => |t| return t.hit(r, ray_t, rec),
-            .RotateY => |rY| return rY.hit(r, ray_t, rec),
-            .ConstantMedium => |cm| return cm.hit(r, ray_t, rec),
-        }
-    }
+    pub fn set_face_normal(self: *Self, r: *const Ray, outward_normal: *const @Vector(3, f32)) void {
+        // Sets the hit record normal Vector
+        // NOTE: the parameter outward_normal is assumed to have unit length
 
-    pub fn boundingBox(self: Primitive) AABB {
-        switch (self) {
-            .Sphere => |s| return s.bounding_box(),
-            .Quad => |q| return q.bounding_box(),
-            .Box => |b| return b.bounding_box(),
-            .Translate => |t| return t.bounding_box(),
-            .RotateY => |rY| return rY.bounding_box(),
-            .ConstantMedium => |cm| return cm.bounding_box(),
-        }
+        self.*.front_face = (math.dot(r.direction, outward_normal.*)) < 0;
+        self.*.normal = if (self.*.front_face) outward_normal.* else math.invert(outward_normal.*);
     }
 };
 
@@ -194,9 +185,9 @@ pub const HittableList = struct {
             const current_center = center.position(r.tm);
             //const oc = center - r.origin;
             const oc = current_center - r.origin;
-            const a = vec.square_magnitude(r.direction);
-            const h = vec.dot(r.direction, oc);
-            const c = vec.square_magnitude(oc) - radius * radius;
+            const a = math.square_magnitude(r.direction);
+            const h = math.dot(r.direction, oc);
+            const c = math.square_magnitude(oc) - radius * radius;
             const discriminant = h * h - a * c;
 
             if (discriminant < 0) continue;
@@ -241,12 +232,12 @@ pub const HittableList = struct {
             const normal = normals[i];
             const D = Ds[i];
 
-            const denom = vec.dot(normal, r.direction);
+            const denom = math.dot(normal, r.direction);
 
             // Parallel to plane check (approximate)
             if (@abs(denom) < 1e-8) continue;
 
-            const t = (D - vec.dot(normal, r.origin)) / denom;
+            const t = (D - math.dot(normal, r.origin)) / denom;
 
             // Check against current closest_so_far
             if (t < ray_t.min or t > closest_so_far) continue;
@@ -255,8 +246,8 @@ pub const HittableList = struct {
             const intersection = r.position(t);
             const planar_hitpoint_vec = intersection - Qs[i];
 
-            const alpha = vec.dot(ws[i], vec.cross(planar_hitpoint_vec, vs[i]));
-            const beta = vec.dot(ws[i], vec.cross(us[i], planar_hitpoint_vec));
+            const alpha = math.dot(ws[i], math.cross(planar_hitpoint_vec, vs[i]));
+            const beta = math.dot(ws[i], math.cross(us[i], planar_hitpoint_vec));
 
             const unit_interval = Interval.init(0, 1);
             if (!unit_interval.contains(alpha) or !unit_interval.contains(beta)) continue;

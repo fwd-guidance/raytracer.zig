@@ -1,8 +1,11 @@
-const rtw = @import("rtweekend.zig");
+const utils = @import("utils.zig");
 
 const Texture = @import("texture.zig").Texture;
-const Ray = rtw.Ray;
-const hit_record = rtw.hit_record;
+const math = @import("math.zig");
+const Ray = math.Ray;
+
+const scene = @import("scene.zig");
+const hit_record = scene.hit_record;
 
 pub const Material = union(enum) {
     Lambertian: Lambertian,
@@ -55,7 +58,7 @@ pub const Lambertian = struct {
 
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
         _ = self;
-        const scatter_direction: @Vector(3, f32) = rec.*.normal + rtw.vec.random_unit_vector();
+        const scatter_direction: @Vector(3, f32) = rec.*.normal + math.random_unit_vector();
         scattered.* = Ray.init(rec.*.p, scatter_direction, r_in.*.tm);
 
         // TODO: look into fixing this. render is fine but its jank. section 4.2 book 2.
@@ -70,11 +73,11 @@ pub const Metal = struct {
     const Self = @This();
 
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
-        var reflected = rtw.vec.reflect(&r_in.direction, &rec.normal);
-        reflected = rtw.vec.unit(reflected) + (rtw.vec.scale(rtw.vec.random_unit_vector(), self.fuzz));
+        var reflected = math.reflect(&r_in.direction, &rec.normal);
+        reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
         scattered.* = Ray.init(rec.*.p, reflected, r_in.*.tm);
         attenuation.* = self.albedo;
-        return rtw.vec.dot(scattered.*.direction, rec.*.normal) > 0;
+        return math.dot(scattered.*.direction, rec.*.normal) > 0;
     }
 };
 
@@ -97,17 +100,17 @@ pub const Dielectric = struct {
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
         attenuation.* = @Vector(3, f32){ 1.0, 1.0, 1.0 };
         const ri: f32 = if (rec.*.front_face) 1.0 / self.refraction_index else self.refraction_index;
-        const unit_direction = rtw.vec.unit(r_in.*.direction);
-        const cos_theta: f32 = @min(rtw.vec.dot(rtw.vec.invert(unit_direction), rec.*.normal), 1.0);
+        const unit_direction = math.unit(r_in.*.direction);
+        const cos_theta: f32 = @min(math.dot(math.invert(unit_direction), rec.*.normal), 1.0);
         const sin_theta: f32 = @sqrt(1.0 - cos_theta * cos_theta);
 
         const cannot_refract: bool = (ri * sin_theta) > 1.0;
         var direction: @Vector(3, f32) = undefined;
 
-        if (cannot_refract or (self.reflectance(cos_theta) > rtw.random_double())) {
-            direction = rtw.vec.reflect(&unit_direction, &rec.*.normal);
+        if (cannot_refract or (self.reflectance(cos_theta) > utils.random_double())) {
+            direction = math.reflect(&unit_direction, &rec.*.normal);
         } else {
-            direction = rtw.vec.refract(&unit_direction, rec.*.normal, ri);
+            direction = math.refract(&unit_direction, rec.*.normal, ri);
         }
 
         scattered.* = Ray.init(rec.*.p, direction, r_in.*.tm);
@@ -134,7 +137,7 @@ pub const Isotropic = struct {
 
     pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const hit_record, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture) bool {
         const texture = textures[self.tex_id];
-        scattered.* = Ray.init(rec.*.p, rtw.vec.random_unit_vector(), r_in.*.tm);
+        scattered.* = Ray.init(rec.*.p, math.random_unit_vector(), r_in.*.tm);
         attenuation.* = texture.value(rec.*.u, rec.*.v, rec.*.p);
         return true;
     }

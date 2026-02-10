@@ -1,7 +1,9 @@
-const RTWImage = @import("rtw_stb_image.zig").RTWImage;
-const Perlin = @import("perlin.zig").Perlin;
-const vec = @import("rtweekend.zig").vec;
 const std = @import("std");
+const utils = @import("utils.zig");
+const math = @import("math.zig");
+
+const RTWImage = utils.RTWImage;
+const Perlin = utils.Perlin;
 
 pub const Texture = union(enum) {
     SolidColor: SolidColor,
@@ -113,6 +115,6 @@ pub const Noise = struct {
         _ = v;
 
         const half_vec = @Vector(3, f32){ 0.5, 0.5, 0.5 };
-        return vec.scale(half_vec, (1 + std.math.sin(self.scale * p[0] + 10 * self.perlin.turb(p, 7))));
+        return math.scale(half_vec, (1 + std.math.sin(self.scale * p[0] + 10 * self.perlin.turb(p, 7))));
     }
 };

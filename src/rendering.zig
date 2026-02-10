@@ -1,20 +1,18 @@
-const rtw = @import("rtweekend.zig");
+const math = @import("math.zig");
+const scene = @import("scene.zig");
+const utils = @import("utils.zig");
 
-const hittable_list = rtw.HittableList.HittableList;
-const Ray = rtw.ray.Ray;
-const hit_record = rtw.hittable.hit_record;
-const std = rtw.std;
+const hittable_list = scene.HittableList;
+const Ray = math.Ray;
+const hit_record = scene.hit_record;
+const std = @import("std");
 const Thread = std.Thread;
 const Mutex = std.Thread.Mutex;
 const AtomicValue = std.atomic.Value;
 
-const vec = rtw.vec;
-const init = rtw.vec.init;
-const color = rtw.color;
-const Interval = rtw.interval.Interval;
-const random_double = rtw.random_double;
-const material = rtw.material;
-const Result = material.Result;
+const Interval = math.Interval;
+const random_double = utils.random_double;
+const material = @import("material.zig").Material;
 
 pub const Camera = struct {
     samples_per_pixel: u32, //f32,
@@ -56,25 +54,25 @@ pub const Camera = struct {
         const viewport_height: f32 = 2 * h * self.focus_dist;
         const viewport_width: f32 = viewport_height * (w_f / h_f);
 
-        self.w = vec.unit(self.lookfrom - self.lookat);
-        self.u = vec.unit(vec.cross(self.vup, self.w));
-        self.v = vec.cross(self.w, self.u);
+        self.w = math.unit(self.lookfrom - self.lookat);
+        self.u = math.unit(math.cross(self.vup, self.w));
+        self.v = math.cross(self.w, self.u);
 
-        const viewport_u: @Vector(3, f32) = vec.scale(self.u, viewport_width);
-        const viewport_v: @Vector(3, f32) = vec.scale(vec.invert(self.v), viewport_height);
+        const viewport_u: @Vector(3, f32) = math.scale(self.u, viewport_width);
+        const viewport_v: @Vector(3, f32) = math.scale(math.invert(self.v), viewport_height);
 
         self.pixel_delta_u = viewport_u * @as(@Vector(3, f32), @splat(1.0 / w_f));
         self.pixel_delta_v = viewport_v * @as(@Vector(3, f32), @splat(1.0 / h_f));
 
         const viewport_upper_left: @Vector(3, f32) = self.center -
-            vec.scale(self.w, self.focus_dist) -
-            vec.scale(viewport_u, 0.5) -
-            vec.scale(viewport_v, 0.5);
-        self.pixel00_loc = viewport_upper_left + init(0.5, 0.5, 0.5) * (self.pixel_delta_u + self.pixel_delta_v);
+            math.scale(self.w, self.focus_dist) -
+            math.scale(viewport_u, 0.5) -
+            math.scale(viewport_v, 0.5);
+        self.pixel00_loc = viewport_upper_left + math.init(0.5, 0.5, 0.5) * (self.pixel_delta_u + self.pixel_delta_v);
 
         const defocus_radius: f32 = self.focus_dist * std.math.tan(std.math.degreesToRadians(self.defocus_angle / 2.0));
-        self.defocus_disk_u = vec.scale(self.u, defocus_radius);
-        self.defocus_disk_v = vec.scale(self.v, defocus_radius);
+        self.defocus_disk_u = math.scale(self.u, defocus_radius);
+        self.defocus_disk_v = math.scale(self.v, defocus_radius);
     }
 
     pub fn render(self: *Self, world: *const hittable_list) !void {
@@ -93,7 +91,7 @@ pub const Camera = struct {
 
         try pixel_buffer.resize(std.heap.page_allocator, total_pixels);
         for (pixel_buffer.items) |*pixel| {
-            pixel.* = init(0, 0, 0);
+            pixel.* = math.init(0, 0, 0);
         }
 
         std.debug.print("Rendering with {d} threads\n", .{self.num_threads});
@@ -129,7 +127,7 @@ pub const Camera = struct {
 
                     var i: u32 = 0;
                     while (i < cam_width) : (i += 1) {
-                        var pixel_color = init(0, 0, 0);
+                        var pixel_color = math.init(0, 0, 0);
 
                         var sample: u32 = 0;
                         while (sample < camera.samples_per_pixel) : (sample += 1) {
@@ -138,7 +136,7 @@ pub const Camera = struct {
                         }
 
                         const buffer_index = @as(usize, j) * @as(usize, cam_width) + @as(usize, i);
-                        context.buffer.items[buffer_index] = vec.scale(pixel_color, camera.pixel_samples_scale);
+                        context.buffer.items[buffer_index] = math.scale(pixel_color, camera.pixel_samples_scale);
                     }
                 }
             }
@@ -184,7 +182,7 @@ pub const Camera = struct {
         try writer.interface.print("P3\n{d} {d} \n255\n", .{ width, height });
 
         for (pixel_buffer.items) |pixel| {
-            try color.write_color(&writer.interface, pixel);
+            try write_color(&writer.interface, pixel);
         }
 
         try writer.interface.flush();
@@ -209,19 +207,19 @@ pub const Camera = struct {
     }
 
     fn sample_square() @Vector(3, f32) {
-        return vec.init(random_double() - 0.5, random_double() - 0.5, 0);
+        return math.init(random_double() - 0.5, random_double() - 0.5, 0);
     }
 
     fn defocus_disk_sample(self: *Self) @Vector(3, f32) {
-        const p = vec.random_in_unit_disk();
-        return self.center + vec.scale(self.defocus_disk_u, p[0]) + vec.scale(self.defocus_disk_v, p[1]);
+        const p = math.random_in_unit_disk();
+        return self.center + math.scale(self.defocus_disk_u, p[0]) + math.scale(self.defocus_disk_v, p[1]);
     }
 
     /// Recursive ray colour with emissive material support.
     /// Returns the color contribution from both emitted light and scattered rays.
     fn ray_color(camera: *const Self, r: Ray, depth: u32, world: *const hittable_list) @Vector(3, f32) {
         // If we've exceeded the ray bounce limit, no more light is gathered
-        if (depth <= 0) return init(0, 0, 0);
+        if (depth <= 0) return math.init(0, 0, 0);
 
         var rec: hit_record = undefined;
         const hit_result = world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec);
@@ -251,7 +249,7 @@ pub const Camera = struct {
                 break :blk false;
             },
             .Isotropic => |i| blk: {
-                scattered = Ray.init(rec.p, vec.random_unit_vector(), r.tm);
+                scattered = Ray.init(rec.p, math.random_unit_vector(), r.tm);
                 attenuation = world.textures.items[i.tex_id].value(rec.u, rec.v, rec.p);
                 break :blk true;
             },
@@ -272,3 +270,35 @@ pub const Camera = struct {
         return color_from_emission + color_from_scatter;
     }
 };
+
+pub fn linear_to_gamma(linear_component: f32) f32 {
+    if (linear_component > 0) return @sqrt(linear_component) else return 0;
+}
+
+inline fn writeU8(writer: anytype, value: u8) !void {
+    if (value >= 100) {
+        try writer.writeByte('0' + value / 100);
+    }
+    if (value >= 10) {
+        try writer.writeByte('0' + (value / 10) % 10);
+    }
+    try writer.writeByte('0' + value % 10);
+}
+
+pub fn write_color(writer: anytype, pixel_color: @Vector(3, f32)) !void {
+    const r: f32 = linear_to_gamma(pixel_color[0]);
+    const g: f32 = linear_to_gamma(pixel_color[1]);
+    const b: f32 = linear_to_gamma(pixel_color[2]);
+
+    const intensity: Interval = Interval{ .min = 0.000, .max = 0.999 };
+    const rbyte = @as(u8, @intFromFloat(256 * intensity.clamp(r)));
+    const gbyte = @as(u8, @intFromFloat(256 * intensity.clamp(g)));
+    const bbyte = @as(u8, @intFromFloat(256 * intensity.clamp(b)));
+
+    try writeU8(writer, rbyte);
+    try writer.writeByte(' ');
+    try writeU8(writer, gbyte);
+    try writer.writeByte(' ');
+    try writeU8(writer, bbyte);
+    try writer.writeByte('\n');
+}
