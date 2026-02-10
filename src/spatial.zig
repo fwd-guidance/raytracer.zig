@@ -160,8 +160,8 @@ pub const BVHNode = struct {
             node.right = try Hittable.create_from_bvh(allocator, try init_from_span(allocator, objects, mid, end));
         }
 
-        const box_left = get_box_for_hittable(node.left);
-        const box_right = get_box_for_hittable(node.right);
+        const box_left = node.left.bounding_box();
+        const box_right = node.right.bounding_box();
         node.bbox = AABB.merge(box_left, box_right);
         return node;
     }
@@ -224,16 +224,6 @@ fn sort_primitives_by_axis(objects: []Primitive, axis: u8) void {
     std.sort.insertion(Primitive, objects, Context{ .axis = axis }, Context.lessThan);
 
     //std.sort.pdq(Sphere, objects, Context{ .axis = axis }, Context.lessThan);
-}
-
-// Helper function to get the bounding box for a sphere
-fn get_sphere_box(sphere: Sphere) AABB {
-    return sphere.bounding_box();
-}
-
-// Helper to get the bounding box for a hittable
-fn get_box_for_hittable(hittable: *Hittable) AABB {
-    return hittable.bounding_box();
 }
 
 // Helper to create a hittable from a sphere
