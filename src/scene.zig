@@ -41,8 +41,8 @@ pub const HitRecord = struct {
 };
 
 pub const HittableList = struct {
-    spheres: MultiArrayList(Sphere),
-    quads: MultiArrayList(Quad),
+    spheres: ArrayList(Sphere),
+    quads: ArrayList(Quad),
     boxes: ArrayList(Box),
     constant_mediums: ArrayList(ConstantMedium),
     materials: ArrayList(Material),
@@ -56,8 +56,8 @@ pub const HittableList = struct {
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
-            .spheres = MultiArrayList(Sphere){},
-            .quads = MultiArrayList(Quad){},
+            .spheres = ArrayList(Sphere){},
+            .quads = ArrayList(Quad){},
             .boxes = ArrayList(Box){},
             .constant_mediums = ArrayList(ConstantMedium){},
             .materials = ArrayList(Material){},
@@ -76,8 +76,8 @@ pub const HittableList = struct {
             self.bvh_root = null;
         }
 
-        self.*.spheres.deinit(self.allocator);
-        self.*.quads.deinit(self.allocator);
+        self.spheres.deinit(self.allocator);
+        self.quads.deinit(self.allocator);
         self.materials.deinit(self.allocator);
         self.textures.deinit(self.allocator);
         self.boxes.deinit(self.allocator);
@@ -113,11 +113,11 @@ pub const HittableList = struct {
     pub fn add(self: *Self, obj: Primitive) anyerror!*Self {
         switch (obj) {
             .Sphere => |s| {
-                try self.*.spheres.append(self.allocator, s);
+                try self.spheres.append(self.allocator, s);
                 self.bbox = AABB.merge(self.bbox, s.bounding_box());
             },
             .Quad => |q| {
-                try self.*.quads.append(self.allocator, q);
+                try self.quads.append(self.allocator, q);
                 self.bbox = AABB.merge(self.bbox, q.bounding_box());
             },
             .Box => |b| {
@@ -125,7 +125,7 @@ pub const HittableList = struct {
                 self.bbox = AABB.merge(self.bbox, b.bounding_box());
             },
             .ConstantMedium => |cm| {
-                try self.*.constant_mediums.append(self.allocator, cm);
+                try self.constant_mediums.append(self.allocator, cm);
                 self.bbox = AABB.merge(self.bbox, cm.bounding_box());
             },
         }
@@ -138,124 +138,7 @@ pub const HittableList = struct {
     }
 
     pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) !bool {
-        // Use BVH if available
-        if (self.bvh_root != null) {
-            return self.bvh_root.?.hit(r, ray_t, rec);
-        }
-
-        var hit_anything = false;
-        var closest_so_far = ray_t.max;
-
-        // --- SoA OPTIMIZATION STARTS HERE ---
-
-        // 1. Get slices for the specific fields we need for intersection
-        const centers = self.spheres.items(.center);
-        const radii = self.spheres.items(.radius);
-        const inv_radii = self.spheres.items(.inv_radius);
-        const mat_ids = self.spheres.items(.mat_id);
-
-        // 2. Iterate by index
-        for (0..self.spheres.len) |i| {
-            const center = centers[i];
-            const radius = radii[i];
-            const inv_radius = inv_radii[i];
-
-            // Perform Intersection Check (Inlined for speed)
-            const current_center = center.position(r.tm);
-            const oc = current_center - r.origin;
-            const a = math.square_magnitude(r.direction);
-            const h = math.dot(r.direction, oc);
-            const c = math.square_magnitude(oc) - radius * radius;
-            const discriminant = h * h - a * c;
-
-            if (discriminant < 0) continue;
-
-            const sqrt_discriminant = @sqrt(discriminant);
-            const inv_a = 1.0 / a;
-
-            var root = (h - sqrt_discriminant) * inv_a;
-            if (root <= ray_t.min or root >= closest_so_far) {
-                root = (h + sqrt_discriminant) * inv_a;
-                if (root <= ray_t.min or root >= closest_so_far) {
-                    continue;
-                }
-            }
-
-            // 3. We have a hit! Update the record.
-            closest_so_far = root;
-            hit_anything = true;
-
-            rec.t = root;
-            rec.p = r.position(root);
-
-            const outward_normal = (rec.p - current_center) * @as(@Vector(3, f32), @splat(inv_radius));
-            rec.set_face_normal(&r, &outward_normal);
-
-            // Only access the material ID array when we actually hit something
-            rec.mat_id = mat_ids[i];
-        }
-
-        // --- QUAD SOA LOOP ---
-        // Fetch separate slices for Quad components
-        const Qs = self.quads.items(.Q);
-        const us = self.quads.items(.u);
-        const vs = self.quads.items(.v);
-        const ws = self.quads.items(.w);
-        const normals = self.quads.items(.normal);
-        const Ds = self.quads.items(.D);
-        const quad_mats = self.quads.items(.mat_id);
-
-        for (0..self.quads.len) |i| {
-            const normal = normals[i];
-            const D = Ds[i];
-
-            const denom = math.dot(normal, r.direction);
-
-            // Parallel to plane check (approximate)
-            if (@abs(denom) < 1e-8) continue;
-
-            const t = (D - math.dot(normal, r.origin)) / denom;
-
-            // Check against current closest_so_far
-            if (t < ray_t.min or t > closest_so_far) continue;
-
-            // Determine if hit is within the Quad (interior check)
-            const intersection = r.position(t);
-            const planar_hitpoint_vec = intersection - Qs[i];
-
-            const alpha = math.dot(ws[i], math.cross(planar_hitpoint_vec, vs[i]));
-            const beta = math.dot(ws[i], math.cross(us[i], planar_hitpoint_vec));
-
-            const unit_interval = Interval.init(0, 1);
-            if (!unit_interval.contains(alpha) or !unit_interval.contains(beta)) continue;
-
-            // Valid Hit!
-            closest_so_far = t;
-            hit_anything = true;
-
-            rec.t = t;
-            rec.p = intersection;
-            rec.mat_id = quad_mats[i];
-            rec.u = alpha;
-            rec.v = beta;
-            rec.set_face_normal(&r, &normal);
-        }
-
-        for (self.boxes.items) |b| {
-            if (b.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
-                hit_anything = true;
-                closest_so_far = rec.t;
-            }
-        }
-
-        for (self.constant_mediums.items) |cm| {
-            if (cm.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
-                hit_anything = true;
-                closest_so_far = rec.t;
-            }
-        }
-
-        return hit_anything;
+        return self.bvh_root.?.hit(r, ray_t, rec);
     }
 
     pub fn bounding_box(self: Self) AABB {
@@ -283,7 +166,7 @@ pub const HittableList = struct {
             self.bvh_root = null;
         }
 
-        const total_count = self.spheres.len + self.quads.len + self.boxes.items.len + self.constant_mediums.items.len;
+        const total_count = self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len;
         if (total_count == 0) return;
 
         // Allocate a temporary list to hold all primitives for BVH construction
@@ -292,18 +175,15 @@ pub const HittableList = struct {
 
         var idx: usize = 0;
 
-        // Copy Spheres
-        for (0..self.spheres.len) |i| {
-            primitives[idx] = Primitive{ .Sphere = self.spheres.get(i) };
+        for (self.spheres.items) |s| {
+            primitives[idx] = Primitive{ .Sphere = s };
             idx += 1;
         }
 
-        // Copy Quads
-        for (0..self.quads.len) |i| {
-            primitives[idx] = Primitive{ .Quad = self.quads.get(i) };
+        for (self.quads.items) |q| {
+            primitives[idx] = Primitive{ .Quad = q };
             idx += 1;
         }
-
         for (self.boxes.items) |b| {
             primitives[idx] = Primitive{ .Box = b };
             idx += 1;
