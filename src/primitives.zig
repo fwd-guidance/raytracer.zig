@@ -15,8 +15,6 @@ pub const Primitive = union(enum) {
     Sphere: Sphere,
     Quad: Quad,
     Box: Box,
-    Translate: Translate,
-    RotateY: RotateY,
     ConstantMedium: ConstantMedium,
 
     pub fn hit(self: Primitive, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
@@ -24,8 +22,6 @@ pub const Primitive = union(enum) {
             .Sphere => |s| return s.hit(r, ray_t, rec),
             .Quad => |q| return q.hit(r, ray_t, rec),
             .Box => |b| return b.hit(r, ray_t, rec),
-            .Translate => |t| return t.hit(r, ray_t, rec),
-            .RotateY => |rY| return rY.hit(r, ray_t, rec),
             .ConstantMedium => |cm| return cm.hit(r, ray_t, rec),
         }
     }
@@ -35,9 +31,25 @@ pub const Primitive = union(enum) {
             .Sphere => |s| return s.bounding_box(),
             .Quad => |q| return q.bounding_box(),
             .Box => |b| return b.bounding_box(),
-            .Translate => |t| return t.bounding_box(),
-            .RotateY => |rY| return rY.bounding_box(),
             .ConstantMedium => |cm| return cm.bounding_box(),
+        }
+    }
+
+    pub fn translate(self: Primitive, offset: @Vector(3, f32)) void {
+        switch (self) {
+            .Sphere => |s| return s.translate(offset),
+            .Quad => |q| return q.translate(offset),
+            .Box => |b| return b.translate(offset),
+            .ConstantMedium => |cm| return cm.translate(offset),
+        }
+    }
+
+    pub fn rotate_y(self: Primitive, angle: f32) void {
+        switch (self) {
+            .Sphere => |s| return s.rotate_y(angle),
+            .Quad => |q| return q.rotate_y(angle),
+            .Box => |b| return b.rotate_y(angle),
+            .ConstantMedium => |cm| return cm.rotate_y(angle),
         }
     }
 };
@@ -91,12 +103,8 @@ pub const Sphere = struct {
 
         const current_center = self.center.position(r.tm);
 
-        //const oc: @Vector(3, f32) = self.center - r.*.origin;
-        //const oc: @Vector(3, f32) = self.center - ray_origin;
         const oc = current_center - ray_origin;
-        //const a: f32 = vec.square_magnitude(r.*.direction);
         const a: f32 = math.square_magnitude(ray_dir);
-        //const h: f32 = vec.dot(r.*.direction, oc);
         const h: f32 = math.dot(ray_dir, oc);
         const c: f32 = math.square_magnitude(oc) - self.radius_squared;
 
@@ -155,6 +163,38 @@ pub const Sphere = struct {
             // For static spheres
             return AABB.init_from_points(self.center.origin - r_vec, self.center.origin + r_vec);
         }
+    }
+
+    pub fn translate(self: *Sphere, offset: @Vector(3, f32)) void {
+        self.center.origin += offset;
+        self.bbox.add(offset);
+    }
+
+    pub fn rotate_y(self: *Self, angle: f32) void {
+        const radians = std.math.degreesToRadians(angle);
+        const sin_theta = @sin(radians);
+        const cos_theta = @cos(radians);
+
+        // Rotate center around origin
+        const old_origin = self.center.origin;
+        self.center.origin = @Vector(3, f32){
+            cos_theta * old_origin[0] + sin_theta * old_origin[2],
+            old_origin[1],
+            -sin_theta * old_origin[0] + cos_theta * old_origin[2],
+        };
+
+        // If moving sphere, rotate the direction vector too
+        if (self.moving) {
+            const old_dir = self.center.direction;
+            self.center.direction = @Vector(3, f32){
+                cos_theta * old_dir[0] + sin_theta * old_dir[2],
+                old_dir[1],
+                -sin_theta * old_dir[0] + cos_theta * old_dir[2],
+            };
+        }
+
+        // Recompute bounding box
+        self.bbox = self.bounding_box();
     }
 };
 
@@ -227,16 +267,49 @@ pub const Quad = struct {
 
         return true;
     }
+
+    pub fn translate(self: *Quad, offset: @Vector(3, f32)) void {
+        self.Q += offset;
+        self.D = math.dot(self.normal, self.Q);
+        self.bbox = self.bbox.add(offset);
+    }
+
+    pub fn rotate_y(self: *Quad, angle: f32) void {
+        const radians = std.math.degreesToRadians(angle);
+        const sin_theta = @sin(radians);
+        const cos_theta = @cos(radians);
+
+        // Rotate Q, u, v vectors
+        self.Q = rotate_y_vec(self.Q, cos_theta, sin_theta);
+        self.u = rotate_y_vec(self.u, cos_theta, sin_theta);
+        self.v = rotate_y_vec(self.v, cos_theta, sin_theta);
+
+        // Recompute derived values
+        const n = math.cross(self.u, self.v);
+        self.normal = math.unit(n);
+        self.w = n / @as(@Vector(3, f32), @splat(math.dot(n, n)));
+        self.D = math.dot(self.normal, self.Q);
+
+        // Recompute bounding box
+        self.bbox = set_bounding_box(self.Q, self.u, self.v);
+    }
+
+    fn rotate_y_vec(vec: @Vector(3, f32), cos_theta: f32, sin_theta: f32) @Vector(3, f32) {
+        return @Vector(3, f32){
+            cos_theta * vec[0] + sin_theta * vec[2],
+            vec[1],
+            -sin_theta * vec[0] + cos_theta * vec[2],
+        };
+    }
 };
 
 pub const Box = struct {
-    quads: [6]*Primitive,
+    quads: [6]Quad,
     bbox: AABB,
-    allocator: std.mem.Allocator,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, a: @Vector(3, f32), b: @Vector(3, f32), mat_id: usize) !Self {
+    pub fn init(a: @Vector(3, f32), b: @Vector(3, f32), mat_id: usize) !Self {
         const min = @Vector(3, f32){ @min(a[0], b[0]), @min(a[1], b[1]), @min(a[2], b[2]) };
         const max = @Vector(3, f32){ @max(a[0], b[0]), @max(a[1], b[1]), @max(a[2], b[2]) };
 
@@ -244,42 +317,19 @@ pub const Box = struct {
         const dy = @Vector(3, f32){ 0, max[1] - min[1], 0 };
         const dz = @Vector(3, f32){ 0, 0, max[2] - min[2] };
 
-        var quads: [6]*Primitive = undefined;
+        var quads: [6]Quad = undefined;
 
-        quads[0] = try allocator.create(Primitive);
-        quads[0].* = .{ .Quad = Quad.init(math.init(min[0], min[1], max[2]), dx, dy, mat_id) };
-
-        quads[1] = try allocator.create(Primitive);
-        quads[1].* = .{ .Quad = Quad.init(math.init(max[0], min[1], max[2]), -dz, dy, mat_id) };
-
-        quads[2] = try allocator.create(Primitive);
-        quads[2].* = .{ .Quad = Quad.init(math.init(max[0], min[1], min[2]), -dx, dy, mat_id) };
-
-        quads[3] = try allocator.create(Primitive);
-        quads[3].* = .{ .Quad = Quad.init(math.init(min[0], min[1], min[2]), dz, dy, mat_id) };
-
-        quads[4] = try allocator.create(Primitive);
-        quads[4].* = .{ .Quad = Quad.init(math.init(min[0], max[1], max[2]), dx, -dz, mat_id) };
-
-        quads[5] = try allocator.create(Primitive);
-        quads[5].* = .{ .Quad = Quad.init(math.init(min[0], min[1], min[2]), dx, dz, mat_id) };
+        quads[0] = Quad.init(math.init(min[0], min[1], max[2]), dx, dy, mat_id);
+        quads[1] = Quad.init(math.init(max[0], min[1], max[2]), -dz, dy, mat_id);
+        quads[2] = Quad.init(math.init(max[0], min[1], min[2]), -dx, dy, mat_id);
+        quads[3] = Quad.init(math.init(min[0], min[1], min[2]), dz, dy, mat_id);
+        quads[4] = Quad.init(math.init(min[0], max[1], max[2]), dx, -dz, mat_id);
+        quads[5] = Quad.init(math.init(min[0], min[1], min[2]), dx, dz, mat_id);
 
         return Self{
             .quads = quads,
             .bbox = AABB.init_from_points(min, max),
-            .allocator = allocator,
         };
-    }
-
-    pub fn deinit(self: *Self) void {
-        for (self.quads) |quad| {
-            switch (quad.*) {
-                .Translate => |*t| t.deinit(),
-                .RotateY => |*r| r.deinit(),
-                else => {},
-            }
-            self.allocator.destroy(quad);
-        }
     }
 
     pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
@@ -298,6 +348,57 @@ pub const Box = struct {
 
     pub fn bounding_box(self: Self) AABB {
         return self.bbox;
+    }
+
+    pub fn translate(self: *Self, offset: @Vector(3, f32)) void {
+        for (&self.quads) |*quad| {
+            quad.translate(offset);
+        }
+        self.bbox = self.bbox.add(offset);
+    }
+
+    pub fn rotate_y(self: *Self, angle: f32) void {
+        const radians = std.math.degreesToRadians(angle);
+        const sin_theta = @sin(radians);
+        const cos_theta = @cos(radians);
+
+        for (&self.quads) |*quad| {
+            quad.rotate_y(angle);
+        }
+
+        // Recompute bounding box by testing all 8 corners
+        const old_bbox = self.bbox;
+        var min = @Vector(3, f32){ std.math.inf(f32), std.math.inf(f32), std.math.inf(f32) };
+        var max = @Vector(3, f32){ -std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32) };
+
+        for (0..2) |i| {
+            for (0..2) |j| {
+                for (0..2) |k| {
+                    const fi: f32 = @floatFromInt(i);
+                    const fj: f32 = @floatFromInt(j);
+                    const fk: f32 = @floatFromInt(k);
+
+                    const x = fi * old_bbox.x.max + (1.0 - fi) * old_bbox.x.min;
+                    const y = fj * old_bbox.y.max + (1.0 - fj) * old_bbox.y.min;
+                    const z = fk * old_bbox.z.max + (1.0 - fk) * old_bbox.z.min;
+
+                    const new_x = cos_theta * x + sin_theta * z;
+                    const new_z = -sin_theta * x + cos_theta * z;
+
+                    const tester = @Vector(3, f32){ new_x, y, new_z };
+
+                    min[0] = @min(min[0], tester[0]);
+                    min[1] = @min(min[1], tester[1]);
+                    min[2] = @min(min[2], tester[2]);
+
+                    max[0] = @max(max[0], tester[0]);
+                    max[1] = @max(max[1], tester[1]);
+                    max[2] = @max(max[2], tester[2]);
+                }
+            }
+        }
+
+        self.bbox = AABB.init_from_points(min, max);
     }
 };
 
@@ -324,12 +425,6 @@ pub const ConstantMedium = struct {
     }
 
     pub fn deinit(self: *ConstantMedium) void {
-        switch (self.boundary.*) {
-            .Translate => |*t| t.deinit(),
-            .RotateY => |*r| r.deinit(),
-            .Box => |*b| b.deinit(),
-            else => {},
-        }
         self.allocator.destroy(self.boundary);
     }
 
@@ -380,140 +475,12 @@ pub const ConstantMedium = struct {
     pub fn bounding_box(self: ConstantMedium) AABB {
         return self.boundary.bounding_box();
     }
-};
 
-pub const Translate = struct {
-    primitive: *Primitive,
-    offset: @Vector(3, f32),
-    bbox: AABB,
-    allocator: std.mem.Allocator,
-
-    pub fn init(allocator: std.mem.Allocator, primitive: Primitive, offset: @Vector(3, f32)) !Translate {
-        const obj_ptr = try allocator.create(Primitive);
-        obj_ptr.* = primitive;
-
-        const obj_bbox = primitive.bounding_box();
-        const bbox = obj_bbox.add(offset);
-        return .{
-            .primitive = obj_ptr,
-            .offset = offset,
-            .bbox = bbox,
-            .allocator = allocator,
-        };
+    pub fn translate(self: *ConstantMedium, offset: @Vector(3, f32)) void {
+        self.boundary.translate(offset);
     }
 
-    pub fn deinit(self: *Translate) void {
-        switch (self.primitive.*) {
-            .Translate => |*t| t.deinit(),
-            .RotateY => |*r| r.deinit(),
-            .Box => |*b| b.deinit(),
-            else => {},
-        }
-        self.allocator.destroy(self.primitive);
-    }
-
-    pub fn hit(self: Translate, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        const offset_r: Ray = Ray.init(r.*.origin - self.offset, r.*.direction, r.*.tm);
-
-        if (!self.primitive.hit(&offset_r, ray_t, rec)) {
-            return false;
-        }
-
-        rec.*.p += self.offset;
-
-        return true;
-    }
-
-    pub fn bounding_box(self: Translate) AABB {
-        return self.bbox;
-    }
-};
-
-pub const RotateY = struct {
-    primitive: *Primitive,
-    sin_theta: f32,
-    cos_theta: f32,
-    bbox: AABB,
-    allocator: std.mem.Allocator,
-
-    pub fn init(allocator: std.mem.Allocator, primitive: Primitive, angle: f32) !RotateY {
-        const obj_ptr = try allocator.create(Primitive);
-        obj_ptr.* = primitive;
-
-        const radians = std.math.degreesToRadians(angle);
-        const sin_theta = @sin(radians);
-        const cos_theta = @cos(radians);
-
-        const prim_bbox = primitive.bounding_box();
-        var min = @Vector(3, f32){ std.math.inf(f32), std.math.inf(f32), std.math.inf(f32) };
-        var max = @Vector(3, f32){ -std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32) };
-
-        // Test all 8 corners of the bounding box
-        for (0..2) |i| {
-            for (0..2) |j| {
-                for (0..2) |k| {
-                    const fi: f32 = @floatFromInt(i);
-                    const fj: f32 = @floatFromInt(j);
-                    const fk: f32 = @floatFromInt(k);
-
-                    // Get corner point (interpolate between min and max)
-                    const x = fi * prim_bbox.x.max + (1.0 - fi) * prim_bbox.x.min;
-                    const y = fj * prim_bbox.y.max + (1.0 - fj) * prim_bbox.y.min;
-                    const z = fk * prim_bbox.z.max + (1.0 - fk) * prim_bbox.z.min;
-
-                    // Rotate the corner point
-                    const new_x = cos_theta * x + sin_theta * z;
-                    const new_z = -sin_theta * x + cos_theta * z;
-
-                    const tester = @Vector(3, f32){ new_x, y, new_z };
-
-                    // Expand bounding box
-                    min[0] = @min(min[0], tester[0]);
-                    min[1] = @min(min[1], tester[1]);
-                    min[2] = @min(min[2], tester[2]);
-
-                    max[0] = @max(max[0], tester[0]);
-                    max[1] = @max(max[1], tester[1]);
-                    max[2] = @max(max[2], tester[2]);
-                }
-            }
-        }
-
-        const bbox = AABB.init_from_points(min, max);
-        return .{
-            .primitive = obj_ptr,
-            .sin_theta = sin_theta,
-            .cos_theta = cos_theta,
-            .bbox = bbox,
-            .allocator = allocator,
-        };
-    }
-
-    pub fn deinit(self: *RotateY) void {
-        switch (self.primitive.*) {
-            .Translate => |*t| t.deinit(),
-            .RotateY => |*r| r.deinit(),
-            .Box => |*b| b.deinit(),
-            else => {},
-        }
-        self.allocator.destroy(self.primitive);
-    }
-
-    pub fn hit(self: RotateY, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        const origin = @Vector(3, f32){ self.cos_theta * r.origin[0] - self.sin_theta * r.origin[2], r.origin[1], self.sin_theta * r.origin[0] + self.cos_theta * r.origin[2] };
-        const direction = @Vector(3, f32){ self.cos_theta * r.*.direction[0] - self.sin_theta * r.*.direction[2], r.*.direction[1], self.sin_theta * r.*.direction[0] + self.cos_theta * r.*.direction[2] };
-
-        const rotated_r = Ray.init(origin, direction, r.*.tm);
-
-        if (!self.primitive.hit(&rotated_r, ray_t, rec)) return false;
-
-        rec.*.p = @Vector(3, f32){ self.cos_theta * rec.*.p[0] + self.sin_theta * rec.*.p[2], rec.*.p[1], -self.sin_theta * rec.*.p[0] + self.cos_theta * rec.*.p[2] };
-        rec.*.normal = @Vector(3, f32){ self.cos_theta * rec.*.normal[0] + self.sin_theta * rec.*.normal[2], rec.*.normal[1], -self.sin_theta * rec.*.normal[0] + self.cos_theta * rec.*.normal[2] };
-
-        return true;
-    }
-
-    pub fn bounding_box(self: RotateY) AABB {
-        return self.bbox;
+    pub fn rotate_y(self: *ConstantMedium, angle: f32) void {
+        self.boundary.rotate_y(angle);
     }
 };

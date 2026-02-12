@@ -19,8 +19,6 @@ const ArrayList = std.ArrayList;
 const Sphere = p.Sphere;
 const Box = p.Box;
 const Quad = p.Quad;
-const Translate = p.Translate;
-const RotateY = p.RotateY;
 const ConstantMedium = p.ConstantMedium;
 
 pub const HitRecord = struct {
@@ -46,8 +44,6 @@ pub const HittableList = struct {
     spheres: MultiArrayList(Sphere),
     quads: MultiArrayList(Quad),
     boxes: ArrayList(Box),
-    translates: ArrayList(Translate),
-    rotations: ArrayList(RotateY),
     constant_mediums: ArrayList(ConstantMedium),
     materials: ArrayList(Material),
     textures: ArrayList(Texture),
@@ -63,8 +59,6 @@ pub const HittableList = struct {
             .spheres = MultiArrayList(Sphere){},
             .quads = MultiArrayList(Quad){},
             .boxes = ArrayList(Box){},
-            .translates = ArrayList(Translate){},
-            .rotations = ArrayList(RotateY){},
             .constant_mediums = ArrayList(ConstantMedium){},
             .materials = ArrayList(Material){},
             .textures = ArrayList(Texture){},
@@ -84,15 +78,8 @@ pub const HittableList = struct {
 
         self.*.spheres.deinit(self.allocator);
         self.*.quads.deinit(self.allocator);
-        self.translates.deinit(self.allocator);
-        self.rotations.deinit(self.allocator);
         self.materials.deinit(self.allocator);
         self.textures.deinit(self.allocator);
-
-        for (self.boxes.items) |*b| {
-            b.deinit();
-        }
-
         self.boxes.deinit(self.allocator);
 
         for (self.constant_mediums.items) |*cm| {
@@ -137,14 +124,6 @@ pub const HittableList = struct {
                 try self.boxes.append(self.allocator, b);
                 self.bbox = AABB.merge(self.bbox, b.bounding_box());
             },
-            .Translate => |t| {
-                try self.*.translates.append(self.allocator, t);
-                self.bbox = AABB.merge(self.bbox, t.bounding_box());
-            },
-            .RotateY => |rY| {
-                try self.*.rotations.append(self.allocator, rY);
-                self.bbox = AABB.merge(self.bbox, rY.bounding_box());
-            },
             .ConstantMedium => |cm| {
                 try self.*.constant_mediums.append(self.allocator, cm);
                 self.bbox = AABB.merge(self.bbox, cm.bounding_box());
@@ -183,7 +162,6 @@ pub const HittableList = struct {
 
             // Perform Intersection Check (Inlined for speed)
             const current_center = center.position(r.tm);
-            //const oc = center - r.origin;
             const oc = current_center - r.origin;
             const a = math.square_magnitude(r.direction);
             const h = math.dot(r.direction, oc);
@@ -209,7 +187,6 @@ pub const HittableList = struct {
 
             rec.t = root;
             rec.p = r.position(root);
-            //const outward_normal = (rec.p - center) * @as(@Vector(3, f32), @splat(radius));
 
             const outward_normal = (rec.p - current_center) * @as(@Vector(3, f32), @splat(inv_radius));
             rec.set_face_normal(&r, &outward_normal);
@@ -271,20 +248,6 @@ pub const HittableList = struct {
             }
         }
 
-        for (self.translates.items) |t| {
-            if (t.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
-                hit_anything = true;
-                closest_so_far = rec.t;
-            }
-        }
-
-        for (self.rotations.items) |rY| {
-            if (rY.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
-                hit_anything = true;
-                closest_so_far = rec.t;
-            }
-        }
-
         for (self.constant_mediums.items) |cm| {
             if (cm.hit(&r, Interval.init(ray_t.min, closest_so_far), rec)) {
                 hit_anything = true;
@@ -320,7 +283,7 @@ pub const HittableList = struct {
             self.bvh_root = null;
         }
 
-        const total_count = self.spheres.len + self.quads.len + self.boxes.items.len + self.translates.items.len + self.rotations.items.len + self.constant_mediums.items.len;
+        const total_count = self.spheres.len + self.quads.len + self.boxes.items.len + self.constant_mediums.items.len;
         if (total_count == 0) return;
 
         // Allocate a temporary list to hold all primitives for BVH construction
@@ -343,16 +306,6 @@ pub const HittableList = struct {
 
         for (self.boxes.items) |b| {
             primitives[idx] = Primitive{ .Box = b };
-            idx += 1;
-        }
-
-        for (self.translates.items) |t| {
-            primitives[idx] = Primitive{ .Translate = t };
-            idx += 1;
-        }
-
-        for (self.rotations.items) |rY| {
-            primitives[idx] = Primitive{ .RotateY = rY };
             idx += 1;
         }
 
