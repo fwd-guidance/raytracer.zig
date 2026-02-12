@@ -16,11 +16,6 @@ pub const AABB = struct {
 
     pub fn init(x: Interval, y: Interval, z: Interval) AABB {
         return pad(AABB{ .x = x, .y = y, .z = z });
-        //return AABB{
-        //    .x = x,
-        //    .y = y,
-        //    .z = z,
-        //};
     }
 
     pub fn empty() AABB {
@@ -115,6 +110,30 @@ pub const AABB = struct {
 
         return true; // Ray intersects box
     }
+
+    pub fn hit_distance(self: AABB, r: Ray, ray_t: Interval) ?f32 {
+        const box_min = @Vector(3, f32){ self.x.min, self.y.min, self.z.min };
+        const box_max = @Vector(3, f32){ self.x.max, self.y.max, self.z.max };
+
+        const t0 = (box_min - r.origin) * r.inv_direction;
+        const t1 = (box_max - r.origin) * r.inv_direction;
+
+        // Handle NaNs by replacing them or ensuring the logic survives
+        // A common trick is to use select to ensure t_smaller is always valid
+        const t_smaller = @min(t0, t1);
+        const t_bigger = @max(t0, t1);
+
+        const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
+        const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
+
+        // STRICT inequality is dangerous for flat objects if t_min == t_max
+        // Use <= instead of <
+        if (t_min <= t_max) {
+            return t_min;
+        } else {
+            return null;
+        }
+    }
 };
 
 pub const BVHNode = struct {
@@ -175,23 +194,51 @@ pub const BVHNode = struct {
     }
 
     pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
-        // If ray doesn't hit the bounding box, return false immediately
-        if (!self.bbox.hit(r, ray_t)) {
+        // OPTIONAL: Check self.bbox first.
+        // (Can be removed if you trust the parent logic, but safe to keep for root).
+        //if (self.bbox.hit_distance(r, ray_t) == null) return false;
+
+        // 1. Fetch children's bounding boxes
+        const box_left = self.left.bounding_box();
+        const box_right = self.right.bounding_box();
+
+        // 2. Intersect both boxes to get distances
+        const dist_left = box_left.hit_distance(r, ray_t);
+        const dist_right = box_right.hit_distance(r, ray_t);
+
+        // 3. Logic: Traverse the closer child first
+        if (dist_left != null and dist_right != null) {
+            if (dist_left.? < dist_right.?) {
+                // Left is closer: Visit Left -> Right
+                const hit_l = self.left.hit(r, ray_t, rec);
+
+                // If left hit, it shrunk the search window (rec.t).
+                // We use this tighter window for the right child.
+                const t_max = if (hit_l) rec.t else ray_t.max;
+                const right_interval = Interval.init(ray_t.min, t_max);
+
+                const hit_r = self.right.hit(r, right_interval, rec);
+                return hit_l or hit_r;
+            } else {
+                // Right is closer: Visit Right -> Left
+                const hit_r = self.right.hit(r, ray_t, rec);
+
+                const t_max = if (hit_r) rec.t else ray_t.max;
+                const left_interval = Interval.init(ray_t.min, t_max);
+
+                const hit_l = self.left.hit(r, left_interval, rec);
+                return hit_r or hit_l;
+            }
+        } else if (dist_left != null) {
+            // Only left box hit
+            return self.left.hit(r, ray_t, rec);
+        } else if (dist_right != null) {
+            // Only right box hit
+            return self.right.hit(r, ray_t, rec);
+        } else {
+            // Neither box hit
             return false;
         }
-
-        // Check hit with left child
-        const hit_left = self.left.hit(r, ray_t, rec);
-
-        // Check hit with right child, using a potentially narrower interval if left was hit
-        const right_ray_t = if (hit_left)
-            Interval.init(ray_t.min, rec.t)
-        else
-            ray_t;
-
-        const hit_right = self.right.hit(r, right_ray_t, rec);
-
-        return (hit_left or hit_right);
     }
 
     pub fn bounding_box(self: Self) AABB {

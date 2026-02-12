@@ -202,25 +202,35 @@ pub const Quad = struct {
     Q: @Vector(3, f32),
     u: @Vector(3, f32),
     v: @Vector(3, f32),
-    w: @Vector(3, f32),
     normal: @Vector(3, f32),
     D: f32,
     mat_id: usize,
     bbox: AABB,
 
+    u_perp: @Vector(3, f32),
+    v_perp: @Vector(3, f32),
+    u_perp_q: f32,
+    v_perp_q: f32,
+
     pub fn init(Q: @Vector(3, f32), u: @Vector(3, f32), v: @Vector(3, f32), mat_id: usize) Quad {
         const n = math.cross(u, v);
         const normal = math.unit(n);
 
+        const w = n / @as(@Vector(3, f32), @splat(math.dot(n, n)));
+        const u_perp = math.cross(v, w);
+        const v_perp = math.cross(w, u);
         return .{
             .Q = Q,
             .u = u,
             .v = v,
-            .w = n / @as(@Vector(3, f32), @splat(math.dot(n, n))),
             .normal = normal,
             .D = math.dot(normal, Q),
             .mat_id = mat_id,
             .bbox = set_bounding_box(Q, u, v),
+            .u_perp = u_perp,
+            .v_perp = v_perp,
+            .u_perp_q = math.dot(u_perp, Q),
+            .v_perp_q = math.dot(v_perp, Q),
         };
     }
 
@@ -235,25 +245,39 @@ pub const Quad = struct {
     }
 
     pub fn hit(self: Quad, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        const denom = math.dot(self.normal, r.*.direction);
-        // bounds check unnecessary?
+        const denom = math.dot(self.normal, r.direction);
+
+        // 1. Parallel Check (unchanged)
         if (@abs(denom) < 1e-8) return false;
 
-        const t = (self.D - math.dot(self.normal, r.*.origin)) / denom;
-        if (!ray_t.contains(t)) return false;
+        // 2. Plane Intersection 't'
+        const t = (self.D - math.dot(self.normal, r.origin)) / denom;
 
-        const intersection = r.*.position(t);
+        // OPTIMIZATION: Inline the interval check to avoid function call overhead
+        if (t < ray_t.min or t > ray_t.max) return false;
 
-        const planar_hitpoint_vec = intersection - self.Q;
-        const alpha = math.dot(self.w, math.cross(planar_hitpoint_vec, self.v));
-        const beta = math.dot(self.w, math.cross(self.u, planar_hitpoint_vec));
+        const intersection = r.position(t);
+        //const planar_hitpoint_vec = intersection - self.Q;
 
-        if (!is_interior(alpha, beta, rec)) return false;
+        // OPTIMIZATION: Check Alpha FIRST
+        // If alpha is bad, we return immediately and skip the Beta calculation.
+        //const alpha = math.dot(self.w, math.cross(planar_hitpoint_vec, self.v));
+        const alpha = math.dot(self.u_perp, intersection) - self.u_perp_q;
+        if (alpha < 0 or alpha > 1) return false;
 
-        rec.*.t = t;
-        rec.*.p = intersection;
-        rec.*.mat_id = self.mat_id;
-        rec.*.set_face_normal(r, &self.normal);
+        // OPTIMIZATION: Check Beta SECOND
+        //const beta = math.dot(self.w, math.cross(self.u, planar_hitpoint_vec));
+        const beta = math.dot(self.v_perp, intersection) - self.v_perp_q;
+        if (beta < 0 or beta > 1) return false;
+
+        // If we got here, it's a valid hit.
+        rec.t = t;
+        rec.p = intersection;
+        rec.mat_id = self.mat_id;
+        rec.set_face_normal(r, &self.normal);
+        rec.u = alpha;
+        rec.v = beta;
+
         return true;
     }
 
@@ -304,8 +328,14 @@ pub const Quad = struct {
 };
 
 pub const Box = struct {
-    quads: [6]Quad,
-    bbox: AABB,
+    bbox: AABB, // World-space bounding box (for BVH)
+    center: @Vector(3, f32),
+    half_size: @Vector(3, f32),
+    mat_id: usize,
+
+    // Rotation Cache
+    sin_theta: f32,
+    cos_theta: f32,
 
     const Self = @This();
 
@@ -313,37 +343,97 @@ pub const Box = struct {
         const min = @Vector(3, f32){ @min(a[0], b[0]), @min(a[1], b[1]), @min(a[2], b[2]) };
         const max = @Vector(3, f32){ @max(a[0], b[0]), @max(a[1], b[1]), @max(a[2], b[2]) };
 
-        const dx = @Vector(3, f32){ max[0] - min[0], 0, 0 };
-        const dy = @Vector(3, f32){ 0, max[1] - min[1], 0 };
-        const dz = @Vector(3, f32){ 0, 0, max[2] - min[2] };
-
-        var quads: [6]Quad = undefined;
-
-        quads[0] = Quad.init(math.init(min[0], min[1], max[2]), dx, dy, mat_id);
-        quads[1] = Quad.init(math.init(max[0], min[1], max[2]), -dz, dy, mat_id);
-        quads[2] = Quad.init(math.init(max[0], min[1], min[2]), -dx, dy, mat_id);
-        quads[3] = Quad.init(math.init(min[0], min[1], min[2]), dz, dy, mat_id);
-        quads[4] = Quad.init(math.init(min[0], max[1], max[2]), dx, -dz, mat_id);
-        quads[5] = Quad.init(math.init(min[0], min[1], min[2]), dx, dz, mat_id);
+        const center = (min + max) * @as(@Vector(3, f32), @splat(0.5));
+        const half_size = (max - min) * @as(@Vector(3, f32), @splat(0.5));
 
         return Self{
-            .quads = quads,
             .bbox = AABB.init_from_points(min, max),
+            .center = center,
+            .half_size = half_size,
+            .mat_id = mat_id,
+            .sin_theta = 0.0,
+            .cos_theta = 1.0,
         };
     }
 
     pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        var hit_anything = false;
-        var closest_so_far = ray_t.max;
+        // 1. Translate Ray to Box Local Space
+        // (Treat the box center as 0,0,0)
+        const origin_diff = r.origin - self.center;
 
-        for (self.quads) |quad| {
-            if (quad.hit(r, Interval.init(ray_t.min, closest_so_far), rec)) {
-                hit_anything = true;
-                closest_so_far = rec.t;
-            }
+        // 2. Rotate Ray into Box Alignment (Inverse Rotation)
+        // Rotating the ray by -angle is faster than rotating the box geometry.
+        // x' = x cos(θ) - z sin(θ)   (standard rotation)
+        // x' = x cos(-θ) - z sin(-θ) = x cos(θ) + z sin(θ) (inverse)
+        const local_origin = @Vector(3, f32){
+            self.cos_theta * origin_diff[0] - self.sin_theta * origin_diff[2],
+            origin_diff[1],
+            self.sin_theta * origin_diff[0] + self.cos_theta * origin_diff[2],
+        };
+
+        const local_dir = @Vector(3, f32){
+            self.cos_theta * r.direction[0] - self.sin_theta * r.direction[2],
+            r.direction[1],
+            self.sin_theta * r.direction[0] + self.cos_theta * r.direction[2],
+        };
+
+        // 3. Slab Method Intersection (AABB Logic)
+        // We intersect the ray against the box defined by [-half_size, +half_size]
+
+        // Precompute inverse direction for speed (handle div by zero safely or use big number)
+        // Note: Zig's vectors handle 1.0/0.0 as Inf, which works with @min/@max logic usually.
+        const inv_d = @as(@Vector(3, f32), @splat(1.0)) / local_dir;
+
+        const t0 = (-self.half_size - local_origin) * inv_d;
+        const t1 = (self.half_size - local_origin) * inv_d;
+
+        const t_smaller = @min(t0, t1);
+        const t_bigger = @max(t0, t1);
+
+        // Find the largest entry time and smallest exit time
+        const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
+        const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
+
+        if (t_min >= t_max) return false;
+
+        // 4. Hit Calculation
+        rec.t = t_min;
+        rec.p = r.position(t_min);
+        rec.mat_id = self.mat_id;
+
+        // 5. Normal Calculation (Local Space)
+        // We figure out which face we hit by seeing which component of t_min matched.
+        // A robust way is to check the impact point relative to the box edges.
+        // However, since we computed t0/t1 per axis, we know exactly which axis was the entry.
+
+        var local_normal = @Vector(3, f32){ 0, 0, 0 };
+        // Determine which axis was the "entry" axis (the Max of the t_smaller values)
+        // Note: This creates a tiny branch, but it's predictable.
+        if (t_smaller[0] > t_smaller[1] and t_smaller[0] > t_smaller[2]) {
+            local_normal[0] = if (local_dir[0] < 0) 1 else -1;
+        } else if (t_smaller[1] > t_smaller[2]) {
+            local_normal[1] = if (local_dir[1] < 0) 1 else -1;
+        } else {
+            local_normal[2] = if (local_dir[2] < 0) 1 else -1;
         }
 
-        return hit_anything;
+        // 6. Rotate Normal back to World Space
+        rec.normal = @Vector(3, f32){
+            self.cos_theta * local_normal[0] + self.sin_theta * local_normal[2],
+            local_normal[1],
+            -self.sin_theta * local_normal[0] + self.cos_theta * local_normal[2],
+        };
+
+        // Ensure proper face orientation (handled by Scene loop usually, but good to be safe)
+        // We already set local_normal to oppose the ray, so it should be outward.
+
+        // 7. Calculate UVs (Optional)
+        // Map the hit point on the face to 0..1
+        // const local_hit = local_origin + local_dir * @as(@Vector(3, f32), @splat(t_min));
+        rec.u = 0;
+        rec.v = 0;
+
+        return true;
     }
 
     pub fn bounding_box(self: Self) AABB {
@@ -351,53 +441,58 @@ pub const Box = struct {
     }
 
     pub fn translate(self: *Self, offset: @Vector(3, f32)) void {
-        for (&self.quads) |*quad| {
-            quad.translate(offset);
-        }
+        self.center += offset;
         self.bbox = self.bbox.add(offset);
     }
 
     pub fn rotate_y(self: *Self, angle: f32) void {
         const radians = std.math.degreesToRadians(angle);
-        const sin_theta = @sin(radians);
-        const cos_theta = @cos(radians);
+        const sin_t = @sin(radians);
+        const cos_t = @cos(radians);
 
-        for (&self.quads) |*quad| {
-            quad.rotate_y(angle);
-        }
+        // Update cached rotation (accumulation)
+        // NOTE: If you only ever rotate from the base state, just overwrite.
+        // If you chain rotations, you need to combine the matrices.
+        // Assuming simple absolute rotation or single step for Cornell box:
+        self.sin_theta = sin_t;
+        self.cos_theta = cos_t;
 
-        // Recompute bounding box by testing all 8 corners
-        const old_bbox = self.bbox;
+        // Rotate Center
+        const old_origin = self.center;
+        // (Assuming rotation is around the WORLD origin, not object center, per your Sphere/Quad code)
+        self.center = @Vector(3, f32){
+            cos_t * old_origin[0] + sin_t * old_origin[2],
+            old_origin[1],
+            -sin_t * old_origin[0] + cos_t * old_origin[2],
+        };
+
+        // Recompute World AABB (Axis-Aligned Bounding Box of the OBB)
+        // We check all 8 corners of the OBB in world space.
         var min = @Vector(3, f32){ std.math.inf(f32), std.math.inf(f32), std.math.inf(f32) };
         var max = @Vector(3, f32){ -std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32) };
 
+        // Loop 8 corners: (+-x, +-y, +-z) relative to center, then rotated
         for (0..2) |i| {
             for (0..2) |j| {
                 for (0..2) |k| {
-                    const fi: f32 = @floatFromInt(i);
-                    const fj: f32 = @floatFromInt(j);
-                    const fk: f32 = @floatFromInt(k);
+                    // Sign: 0 -> -1, 1 -> +1
+                    const sx: f32 = if (i == 0) -1.0 else 1.0;
+                    const sy: f32 = if (j == 0) -1.0 else 1.0;
+                    const sz: f32 = if (k == 0) -1.0 else 1.0;
 
-                    const x = fi * old_bbox.x.max + (1.0 - fi) * old_bbox.x.min;
-                    const y = fj * old_bbox.y.max + (1.0 - fj) * old_bbox.y.min;
-                    const z = fk * old_bbox.z.max + (1.0 - fk) * old_bbox.z.min;
+                    // Local corner unrotated
+                    const local_corner = self.half_size * @Vector(3, f32){ sx, sy, sz };
 
-                    const new_x = cos_theta * x + sin_theta * z;
-                    const new_z = -sin_theta * x + cos_theta * z;
+                    // Rotate corner
+                    const rot_corner = @Vector(3, f32){ cos_t * local_corner[0] + sin_t * local_corner[2], local_corner[1], -sin_t * local_corner[0] + cos_t * local_corner[2] };
 
-                    const tester = @Vector(3, f32){ new_x, y, new_z };
+                    const world_point = self.center + rot_corner;
 
-                    min[0] = @min(min[0], tester[0]);
-                    min[1] = @min(min[1], tester[1]);
-                    min[2] = @min(min[2], tester[2]);
-
-                    max[0] = @max(max[0], tester[0]);
-                    max[1] = @max(max[1], tester[1]);
-                    max[2] = @max(max[2], tester[2]);
+                    min = @min(min, world_point);
+                    max = @max(max, world_point);
                 }
             }
         }
-
         self.bbox = AABB.init_from_points(min, max);
     }
 };
