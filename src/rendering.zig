@@ -1,6 +1,7 @@
 const math = @import("math.zig");
 const scene = @import("scene.zig");
 const utils = @import("utils.zig");
+const pdf = @import("pdf.zig");
 
 const hittable_list = scene.HittableList;
 const Ray = math.Ray;
@@ -251,40 +252,29 @@ pub const Camera = struct {
 
         var scattered: Ray = undefined;
         var attenuation: @Vector(3, f32) = undefined;
+        var pdf_value: f32 = undefined;
 
         const mat = world.materials.items[rec.mat_id];
 
         // Get emitted color from the material (black for non-emissive materials)
-        const color_from_emission = mat.emitted(rec.u, rec.v, rec.p, world.textures.items);
+        const color_from_emission = mat.emitted(&r, &rec, rec.u, rec.v, rec.p, world.textures.items);
 
         // Try to scatter the ray
         // Use the unified Material.scatter() method or handle each case
-        const did_scatter = switch (mat) {
-            .Lambertian => |l| blk: {
-                if (l.scatter(&r, &rec, &attenuation, &scattered)) {
-                    // Override attenuation with texture value for Lambertian
-                    attenuation = world.textures.items[l.tex_id].value(rec.u, rec.v, rec.p);
-                    break :blk true;
-                }
-                break :blk false;
-            },
-            .Isotropic => |i| blk: {
-                scattered = Ray.init(rec.p, math.random_unit_vector(), r.tm);
-                attenuation = world.textures.items[i.tex_id].value(rec.u, rec.v, rec.p);
-                break :blk true;
-            },
-            .Metal => |m| m.scatter(&r, &rec, &attenuation, &scattered),
-            .Dielectric => |d| d.scatter(&r, &rec, &attenuation, &scattered),
-            .DiffuseLight => false, // Lights don't scatter
-        };
+        const did_scatter = mat.scatter(&r, &rec, &attenuation, &scattered, world.textures.items, &pdf_value);
 
         // If the material doesn't scatter, return only the emitted color
         if (!did_scatter) {
             return color_from_emission;
         }
 
-        // Calculate color from scattered ray
-        const color_from_scatter = attenuation * ray_color(camera, scattered, depth - 1, world);
+        const surface_pdf = pdf.CosinePDF.init(rec.normal);
+        scattered = Ray.init(rec.p, surface_pdf.generate(), r.tm);
+        pdf_value = surface_pdf.value(&scattered.direction);
+
+        const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
+
+        const color_from_scatter = (attenuation * math.init(scattering_pdf, scattering_pdf, scattering_pdf) * ray_color(camera, scattered, depth - 1, world)) / math.init(pdf_value, pdf_value, pdf_value);
 
         // Return combined emission and scatter
         return color_from_emission + color_from_scatter;

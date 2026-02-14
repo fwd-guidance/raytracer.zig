@@ -273,18 +273,17 @@ pub fn draw_cornell_box() !void {
     const white = Material.lambertian(white_tex_id);
     const white_id = try world.add_material(white);
 
-    const light_tex = Texture.solid_color(@Vector(3, f32){ 7, 7, 7 });
+    const light_tex = Texture.solid_color(@Vector(3, f32){ 15, 15, 15 });
     const light_tex_id = try world.add_texture(light_tex);
     const difflight = Material.diffuse_light(light_tex_id);
     const difflight_id = try world.add_material(difflight);
 
-    _ = try world.add(.{ .Quad = Quad.init(init(555, 0, 0), init(0, 555, 0), init(0, 0, 555), green_id) });
-    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(0, 555, 0), init(0, 0, 555), red_id) });
-    _ = try world.add(.{ .Quad = Quad.init(init(113, 554, 127), init(330, 0, 0), init(0, 0, 305), difflight_id) });
-    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 0), init(555, 0, 0), init(0, 0, 555), white_id) });
-    _ = try world.add(.{ .Quad = Quad.init(init(555, 555, 555), init(-555, 0, 0), init(0, 0, -555), white_id) });
-    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(555, 0, 0), init(0, 555, 0), white_id) });
-
+    _ = try world.add(.{ .Quad = Quad.init(init(555, 0, 0), init(0, 0, 555), init(0, 555, 0), green_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(0, 0, -555), init(0, 555, 0), red_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(0, 555, 0), init(555, 0, 0), init(0, 0, 555), white_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(555, 0, 0), init(0, 0, -555), white_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(555, 0, 555), init(-555, 0, 0), init(0, 555, 0), white_id) });
+    _ = try world.add(.{ .Quad = Quad.init(init(213, 554, 227), init(130, 0, 0), init(0, 0, 105), difflight_id) });
     var box1 = try Box.init(init(0, 0, 0), init(165, 330, 165), white_id);
     box1.rotate_y(15.0);
     box1.translate(init(265, 0, 295));
@@ -301,8 +300,8 @@ pub fn draw_cornell_box() !void {
 
     var cam: Camera = undefined;
     cam.aspect_ratio = 1.0;
-    cam.image_width = 800;
-    cam.samples_per_pixel = 250;
+    cam.image_width = 600;
+    cam.samples_per_pixel = 1000;
     cam.max_depth = 50;
 
     cam.vfov = 40;
@@ -634,13 +633,13 @@ pub fn draw_ppm() !void {
 }
 
 pub fn main() !void {
-    try draw_ppm();
-    try draw_checkered_spheres();
-    try draw_earth();
-    try draw_perlin_spheres();
-    try draw_quads();
-    try draw_simple_light();
+    //try draw_ppm();
+    //try draw_checkered_spheres();
+    //try draw_earth();
+    //try draw_perlin_spheres();
+    //try draw_quads();
+    //try draw_simple_light();
     try draw_cornell_box();
-    try draw_smoke_cornell_box();
-    try draw_final_scene();
+    //try draw_smoke_cornell_box();
+    //try draw_final_scene();
 }

@@ -1,3 +1,4 @@
+const std = @import("std");
 const utils = @import("utils.zig");
 
 const Texture = @import("texture.zig").Texture;
@@ -34,20 +35,28 @@ pub const Material = union(enum) {
         return Material{ .Isotropic = Isotropic{ .tex_id = tex_id } };
     }
 
-    pub fn scatter(self: Material, r_in: *const Ray, rec: *const HitRecord, attenuation: @Vector(3, f32), scattered: *Ray) bool {
+    pub fn scatter(self: Material, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture, pdf: *f32) bool {
         return switch (self) {
-            .Lambertian => |l| l.scatter(r_in, rec, attenuation, scattered),
-            .Metal => |m| m.scatter(r_in, rec, attenuation, scattered),
-            .Dielectric => |d| d.scatter(r_in, rec, attenuation, scattered),
+            .Lambertian => |l| l.scatter(r_in, rec, attenuation, scattered, textures, pdf),
+            .Metal => |m| m.scatter(r_in, rec, attenuation, scattered, pdf),
+            .Dielectric => |d| d.scatter(r_in, rec, attenuation, scattered, pdf),
             .DiffuseLight => false,
-            .Isotropic => |i| i.scatter(r_in, rec, attenuation, scattered),
+            .Isotropic => |i| i.scatter(r_in, rec, attenuation, scattered, textures, pdf),
         };
     }
 
-    pub fn emitted(self: Material, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+    pub fn emitted(self: Material, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
         return switch (self) {
-            .DiffuseLight => |d| d.emitted(u, v, p, textures),
+            .DiffuseLight => |d| d.emitted(r_in, rec, u, v, p, textures),
             else => @Vector(3, f32){ 0, 0, 0 },
+        };
+    }
+
+    pub fn scattering_pdf(self: Material, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
+        return switch (self) {
+            .Lambertian => |l| l.scattering_pdf(r_in, rec, scattered),
+            .Isotropic => |i| i.scattering_pdf(r_in, rec, scattered),
+            else => 0.0,
         };
     }
 };
@@ -56,14 +65,25 @@ pub const Lambertian = struct {
     tex_id: usize,
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
-        _ = self;
-        const scatter_direction: @Vector(3, f32) = rec.*.normal + math.random_unit_vector();
-        scattered.* = Ray.init(rec.*.p, scatter_direction, r_in.*.tm);
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture, pdf: *f32) bool {
+        const texture = textures[self.tex_id];
+        const onb = math.OrthonormalBasis.init(rec.*.normal);
+        const scatter_direction = onb.transform(math.random_cosine_direction());
 
-        // TODO: look into fixing this. render is fine but its jank. section 4.2 book 2.
-        attenuation.* = @Vector(3, f32){ 1.0, 1.0, 1.0 }; //self.value(rec.*.u, rec.*.v, rec.*.p);
+        scattered.* = Ray.init(rec.*.p, math.unit(scatter_direction), r_in.*.tm);
+        attenuation.* = texture.value(rec.*.u, rec.*.v, rec.*.p);
+        pdf.* = math.dot(onb.w, scattered.direction) / std.math.pi;
         return true;
+    }
+
+    pub fn scattering_pdf(self: Lambertian, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
+        _ = r_in;
+        _ = self;
+        _ = rec;
+        _ = scattered;
+        //const cos_theta = math.dot(rec.normal, math.unit(scattered.direction));
+        //if (cos_theta < 0) return 0 else return cos_theta / std.math.pi;
+        return 1.0 / (2 * std.math.pi);
     }
 };
 
@@ -72,7 +92,8 @@ pub const Metal = struct {
     fuzz: f32,
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, pdf: *f32) bool {
+        _ = pdf;
         var reflected = math.reflect(&r_in.direction, &rec.normal);
         reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
         scattered.* = Ray.init(rec.*.p, reflected, r_in.*.tm);
@@ -97,7 +118,8 @@ pub const Dielectric = struct {
         };
     }
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray) bool {
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, pdf: *f32) bool {
+        _ = pdf;
         attenuation.* = @Vector(3, f32){ 1.0, 1.0, 1.0 };
         const ri: f32 = if (rec.*.front_face) 1.0 / self.refraction_index else self.refraction_index;
         const unit_direction = math.unit(r_in.*.direction);
@@ -127,7 +149,9 @@ pub const Dielectric = struct {
 pub const DiffuseLight = struct {
     tex_id: usize,
 
-    pub fn emitted(self: DiffuseLight, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+    pub fn emitted(self: DiffuseLight, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+        _ = r_in;
+        if (!rec.*.front_face) return math.init(0, 0, 0);
         return textures[self.tex_id].value(u, v, p);
     }
 };
@@ -135,10 +159,19 @@ pub const DiffuseLight = struct {
 pub const Isotropic = struct {
     tex_id: usize,
 
-    pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture) bool {
+    pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture, pdf: *f32) bool {
         const texture = textures[self.tex_id];
         scattered.* = Ray.init(rec.*.p, math.random_unit_vector(), r_in.*.tm);
         attenuation.* = texture.value(rec.*.u, rec.*.v, rec.*.p);
+        pdf.* = 1.0 / (4 * std.math.pi);
         return true;
+    }
+
+    pub fn scattering_pdf(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
+        _ = self;
+        _ = r_in;
+        _ = rec;
+        _ = scattered;
+        return 1.0 / (4 * std.math.pi);
     }
 };

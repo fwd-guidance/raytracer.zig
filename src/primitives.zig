@@ -202,6 +202,7 @@ pub const Quad = struct {
     Q: @Vector(3, f32),
     u: @Vector(3, f32),
     v: @Vector(3, f32),
+    w: @Vector(3, f32),
     normal: @Vector(3, f32),
     D: f32,
     mat_id: usize,
@@ -211,6 +212,7 @@ pub const Quad = struct {
     v_perp: @Vector(3, f32),
     u_perp_q: f32,
     v_perp_q: f32,
+    area: f32,
 
     pub fn init(Q: @Vector(3, f32), u: @Vector(3, f32), v: @Vector(3, f32), mat_id: usize) Quad {
         const n = math.cross(u, v);
@@ -223,6 +225,7 @@ pub const Quad = struct {
             .Q = Q,
             .u = u,
             .v = v,
+            .w = w,
             .normal = normal,
             .D = math.dot(normal, Q),
             .mat_id = mat_id,
@@ -231,6 +234,7 @@ pub const Quad = struct {
             .v_perp = v_perp,
             .u_perp_q = math.dot(u_perp, Q),
             .v_perp_q = math.dot(v_perp, Q),
+            .area = math.magnitude(n),
         };
     }
 
@@ -313,6 +317,12 @@ pub const Quad = struct {
         self.normal = math.unit(n);
         self.w = n / @as(@Vector(3, f32), @splat(math.dot(n, n)));
         self.D = math.dot(self.normal, self.Q);
+
+        self.u_perp = math.cross(self.v, self.w);
+        self.v_perp = math.cross(self.w, self.u);
+        self.u_perp_q = math.dot(self.u_perp, self.Q);
+        self.v_perp_q = math.dot(self.v_perp, self.Q);
+        self.area = math.magnitude(n);
 
         // Recompute bounding box
         self.bbox = set_bounding_box(self.Q, self.u, self.v);

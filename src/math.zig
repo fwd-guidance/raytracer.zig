@@ -61,6 +61,18 @@ pub fn random_unit_vector() @Vector(3, f32) {
     return unit(random_in_unit_sphere());
 }
 
+pub fn random_cosine_direction() @Vector(3, f32) {
+    const r1 = utils.random_double();
+    const r2 = utils.random_double();
+
+    const phi = 2 * std.math.pi * r1;
+    const x = @cos(phi) * @sqrt(r2);
+    const y = @sin(phi) * @sqrt(r2);
+    const z = @sqrt(1 - r2);
+
+    return .{ x, y, z };
+}
+
 pub fn random_on_hemisphere(normal: @Vector(3, f32)) @Vector(3, f32) {
     const on_unit_sphere = random_unit_vector();
     if (dot(on_unit_sphere, normal) > 0.0) {
@@ -88,6 +100,29 @@ pub fn dot(u: @Vector(3, f32), v: @Vector(3, f32)) f32 {
 pub fn cross(u: @Vector(3, f32), v: @Vector(3, f32)) @Vector(3, f32) {
     return init(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
 }
+
+pub const OrthonormalBasis = struct {
+    u: @Vector(3, f32),
+    v: @Vector(3, f32),
+    w: @Vector(3, f32),
+
+    pub fn init(n: @Vector(3, f32)) OrthonormalBasis {
+        const w = unit(n);
+        const a = if (@abs(w[0]) > 0.9) @Vector(3, f32){ 0, 1, 0 } else @Vector(3, f32){ 1, 0, 0 };
+        const v = unit(cross(w, a));
+        const u = cross(w, v);
+
+        return .{ .u = u, .v = v, .w = w };
+    }
+
+    pub fn transform(self: OrthonormalBasis, v: @Vector(3, f32)) @Vector(3, f32) {
+        const scaled_u = self.u * @as(@Vector(3, f32), @splat(v[0]));
+        const scaled_v = self.v * @as(@Vector(3, f32), @splat(v[1]));
+        const scaled_w = self.w * @as(@Vector(3, f32), @splat(v[2]));
+
+        return scaled_u + scaled_v + scaled_w;
+    }
+};
 
 pub const Interval = struct {
     min: f32,
