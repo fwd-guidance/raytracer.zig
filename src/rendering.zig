@@ -271,9 +271,12 @@ pub const Camera = struct {
             return color_from_emission;
         }
 
-        const light_pdf = pdf.HittablePDF.init(lights, rec.p);
-        scattered = Ray.init(rec.p, light_pdf.generate(), r.tm);
-        pdf_value = light_pdf.value(scattered.direction);
+        const p0 = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
+        const p1 = pdf.PDF{ .cosine = pdf.CosinePDF.init(rec.normal) };
+
+        const mixture_pdf = pdf.MixturePDF.init(&p0, &p1);
+        scattered = Ray.init(rec.p, mixture_pdf.generate(), r.tm);
+        pdf_value = mixture_pdf.value(scattered.direction);
 
         const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
 

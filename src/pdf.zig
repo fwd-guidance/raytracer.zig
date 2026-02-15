@@ -1,35 +1,40 @@
 const std = @import("std");
 
+const utils = @import("utils.zig");
 const math = @import("math.zig");
 const scene = @import("scene.zig");
 const HittableList = scene.HittableList;
 
 pub const PDF = union(enum) {
-    SpherePDF,
-    CosinePDF,
-    HittablePDF,
+    sphere: SpherePDF,
+    cosine: CosinePDF,
+    hittable: HittablePDF,
+    mixture: MixturePDF,
 
     pub fn init() PDF {
         return switch (PDF) {
-            .SpherePDF => |s| s.init(),
-            .CosinePDF => |c| c.init(),
-            .HittablePDF => |h| h.init(),
+            .sphere => |s| s.init(),
+            .cosine => |c| c.init(),
+            .hittable => |h| h.init(),
+            .mixture => |m| m.init(),
         };
     }
 
-    pub fn value(direction: *const @Vector(3, f32)) f32 {
-        return switch (PDF) {
-            .SpherePDF => |s| s.value(direction),
-            .CosinePDF => |c| c.value(direction),
-            .HittablePDF => |h| h.value(direction),
+    pub fn value(self: *const PDF, direction: @Vector(3, f32)) f32 {
+        return switch (self.*) {
+            .sphere => |s| s.value(direction),
+            .cosine => |c| c.value(direction),
+            .hittable => |h| h.value(direction),
+            .mixture => |m| m.value(direction),
         };
     }
 
-    pub fn generate() @Vector(3, f32) {
-        return switch (PDF) {
-            .SpherePDF => |s| s.generate(),
-            .CosinePDF => |c| c.generate(),
-            .HittablePDF => |h| h.generate(),
+    pub fn generate(self: *const PDF) @Vector(3, f32) {
+        return switch (self.*) {
+            .sphere => |s| s.generate(),
+            .cosine => |c| c.generate(),
+            .hittable => |h| h.generate(),
+            .mixture => |m| m.generate(),
         };
     }
 };
@@ -39,12 +44,14 @@ pub const SpherePDF = struct {
         return .{};
     }
 
-    pub fn value(direction: *const @Vector(3, f32)) f32 {
+    pub fn value(self: *const SpherePDF, direction: @Vector(3, f32)) f32 {
+        _ = self;
         _ = direction;
-        return 1 / (4 * std.math.pi);
+        return 1.0 / (4 * std.math.pi);
     }
 
-    pub fn generate() @Vector(3, f32) {
+    pub fn generate(self: *const SpherePDF) @Vector(3, f32) {
+        _ = self;
         return math.random_unit_vector();
     }
 };
@@ -56,8 +63,8 @@ pub const CosinePDF = struct {
         return .{ .uvw = math.OrthonormalBasis.init(w) };
     }
 
-    pub fn value(self: CosinePDF, direction: *const @Vector(3, f32)) f32 {
-        const cosine_theta = math.dot(math.unit(direction.*), self.uvw.w);
+    pub fn value(self: CosinePDF, direction: @Vector(3, f32)) f32 {
+        const cosine_theta = math.dot(math.unit(direction), self.uvw.w);
         return @max(0, cosine_theta / std.math.pi);
     }
 
@@ -83,5 +90,25 @@ pub const HittablePDF = struct {
 
     pub fn generate(self: *const HittablePDF) @Vector(3, f32) {
         return self.objects.random(self.origin);
+    }
+};
+
+pub const MixturePDF = struct {
+    p: [2]*const PDF,
+
+    pub fn init(p0: *const PDF, p1: *const PDF) MixturePDF {
+        return .{ .p = .{ p0, p1 } };
+    }
+
+    pub fn value(self: *const MixturePDF, direction: @Vector(3, f32)) f32 {
+        return 0.5 * self.p[0].value(direction) + 0.5 * self.p[1].value(direction);
+    }
+
+    pub fn generate(self: *const MixturePDF) @Vector(3, f32) {
+        if (utils.random_double() < 0.5) {
+            return self.p[0].generate();
+        } else {
+            return self.p[1].generate();
+        }
     }
 };
