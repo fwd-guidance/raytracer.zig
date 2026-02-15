@@ -7,11 +7,13 @@ const HittableList = scene.HittableList;
 pub const PDF = union(enum) {
     SpherePDF,
     CosinePDF,
+    HittablePDF,
 
     pub fn init() PDF {
         return switch (PDF) {
             .SpherePDF => |s| s.init(),
             .CosinePDF => |c| c.init(),
+            .HittablePDF => |h| h.init(),
         };
     }
 
@@ -19,6 +21,7 @@ pub const PDF = union(enum) {
         return switch (PDF) {
             .SpherePDF => |s| s.value(direction),
             .CosinePDF => |c| c.value(direction),
+            .HittablePDF => |h| h.value(direction),
         };
     }
 
@@ -26,6 +29,7 @@ pub const PDF = union(enum) {
         return switch (PDF) {
             .SpherePDF => |s| s.generate(),
             .CosinePDF => |c| c.generate(),
+            .HittablePDF => |h| h.generate(),
         };
     }
 };
