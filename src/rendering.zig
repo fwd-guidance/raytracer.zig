@@ -81,7 +81,7 @@ pub const Camera = struct {
         self.defocus_disk_v = math.scale(self.v, defocus_radius);
     }
 
-    pub fn render(self: *Self, world: *const hittable_list) !void {
+    pub fn render(self: *Self, world: *const hittable_list, lights: *const hittable_list) !void {
         self.initialize();
         self.mutex = Mutex{};
 
@@ -107,6 +107,7 @@ pub const Camera = struct {
         const BufferedRenderContext = struct {
             camera: *Camera,
             world: *const hittable_list,
+            lights: *const hittable_list,
             start_row: u32,
             end_row: u32,
             rows_completed: *AtomicValue(u32),
@@ -117,6 +118,7 @@ pub const Camera = struct {
             fn worker(context: *BufferedRenderContext) void {
                 const camera = context.camera;
                 const world_objects = context.world;
+                const light_objects = context.lights;
                 const cam_width = camera.image_width;
 
                 var j: u32 = context.start_row;
@@ -140,7 +142,7 @@ pub const Camera = struct {
                             var s_i: u32 = 0;
                             while (s_i < camera.sqrt_samples_per_pixel) : (s_i += 1) {
                                 const r: Ray = get_ray(camera, i, j, s_i, s_j);
-                                pixel_color += ray_color(camera, r, camera.max_depth, world_objects);
+                                pixel_color += ray_color(camera, r, camera.max_depth, world_objects, light_objects);
                             }
                         }
 
@@ -175,6 +177,7 @@ pub const Camera = struct {
             try contexts.append(std.heap.page_allocator, BufferedRenderContext{
                 .camera = self,
                 .world = world,
+                .lights = lights,
                 .start_row = start_row,
                 .end_row = end_row,
                 .rows_completed = &rows_completed,
@@ -238,7 +241,7 @@ pub const Camera = struct {
 
     /// Recursive ray colour with emissive material support.
     /// Returns the color contribution from both emitted light and scattered rays.
-    fn ray_color(camera: *const Self, r: Ray, depth: u32, world: *const hittable_list) @Vector(3, f32) {
+    fn ray_color(camera: *const Self, r: Ray, depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
         // If we've exceeded the ray bounce limit, no more light is gathered
         if (depth <= 0) return math.init(0, 0, 0);
 
@@ -268,13 +271,13 @@ pub const Camera = struct {
             return color_from_emission;
         }
 
-        const surface_pdf = pdf.CosinePDF.init(rec.normal);
-        scattered = Ray.init(rec.p, surface_pdf.generate(), r.tm);
-        pdf_value = surface_pdf.value(&scattered.direction);
+        const light_pdf = pdf.HittablePDF.init(lights, rec.p);
+        scattered = Ray.init(rec.p, light_pdf.generate(), r.tm);
+        pdf_value = light_pdf.value(scattered.direction);
 
         const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
 
-        const color_from_scatter = (attenuation * math.init(scattering_pdf, scattering_pdf, scattering_pdf) * ray_color(camera, scattered, depth - 1, world)) / math.init(pdf_value, pdf_value, pdf_value);
+        const color_from_scatter = (attenuation * math.init(scattering_pdf, scattering_pdf, scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.init(pdf_value, pdf_value, pdf_value);
 
         // Return combined emission and scatter
         return color_from_emission + color_from_scatter;
@@ -296,6 +299,10 @@ inline fn write_u8(writer: anytype, value: u8) !void {
 }
 
 pub fn write_color(writer: anytype, pixel_color: @Vector(3, f32)) !void {
+    //if (pixel_color[0] != pixel_color[0]) pixel_color[0] = 0.0;
+    //if (pixel_color[1] != pixel_color[1]) pixel_color[1] = 0.0;
+    //if (pixel_color[2] != pixel_color[2]) pixel_color[2] = 0.0;
+
     const r: f32 = linear_to_gamma(pixel_color[0]);
     const g: f32 = linear_to_gamma(pixel_color[1]);
     const b: f32 = linear_to_gamma(pixel_color[2]);

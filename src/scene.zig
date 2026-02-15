@@ -198,4 +198,45 @@ pub const HittableList = struct {
         const bvh_node = try BVHNode.init_from_list(self.allocator, primitives);
         self.bvh_root = try Hittable.create_from_bvh(self.allocator, bvh_node);
     }
+
+    pub fn pdf_value(self: *const HittableList, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+        const weight = 1.0 / @as(f32, @floatFromInt(self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len));
+        var sum: f32 = 0.0;
+
+        for (self.spheres.items) |s| {
+            sum += weight * s.pdf_value(origin, direction);
+        }
+
+        for (self.quads.items) |q| {
+            sum += weight * q.pdf_value(origin, direction);
+        }
+
+        for (self.boxes.items) |b| {
+            sum += weight * b.pdf_value(origin, direction);
+        }
+
+        for (self.constant_mediums.items) |cm| {
+            sum += weight * cm.pdf_value(origin, direction);
+        }
+
+        return sum;
+    }
+
+    pub fn random(self: *const HittableList, origin: @Vector(3, f32)) @Vector(3, f32) {
+        const int_size = @as(f32, @floatFromInt(self.spheres.items.len + self.quads.items.len + self.boxes.items.len));
+        var index: usize = @intCast(utils.random_int(0, int_size - 1));
+
+        if (index < self.spheres.items.len) {
+            return self.spheres.items[index].random(origin);
+        } else if (index < (self.spheres.items.len + self.quads.items.len)) {
+            index = index % self.spheres.items.len;
+            return self.quads.items[index].random(origin);
+        } else if (index < (self.spheres.items.len + self.quads.items.len + self.boxes.items.len)) {
+            index = index % (self.spheres.items.len + self.quads.items.len + self.boxes.items.len);
+            return self.boxes.items[index].random(origin);
+        } else {
+            index = index % (self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len);
+            return self.constant_mediums.items[index].random(origin);
+        }
+    }
 };

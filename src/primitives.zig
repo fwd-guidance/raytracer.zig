@@ -52,6 +52,24 @@ pub const Primitive = union(enum) {
             .ConstantMedium => |cm| return cm.rotate_y(angle),
         }
     }
+
+    pub fn pdf_value(self: Primitive, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+        switch (self) {
+            .Sphere => |s| return s.pdf_value(origin, direction),
+            .Quad => |q| return q.pdf_value(origin, direction),
+            .Box => |b| return b.pdf_value(origin, direction),
+            .ConstantMedium => |cm| return cm.pdf_value(origin, direction),
+        }
+    }
+
+    pub fn random(self: Primitive, origin: @Vector(3, f32)) @Vector(3, f32) {
+        switch (self) {
+            .Sphere => |s| return s.random(origin),
+            .Quad => |q| return q.random(origin),
+            .Box => |b| return b.random(origin),
+            .ConstantMedium => |cm| return cm.random(origin),
+        }
+    }
 };
 
 pub const Sphere = struct {
@@ -196,6 +214,20 @@ pub const Sphere = struct {
         // Recompute bounding box
         self.bbox = self.bounding_box();
     }
+
+    pub fn pdf_value(self: Sphere, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+        _ = self;
+        _ = origin;
+        _ = direction;
+        return 0.0;
+    }
+
+    pub fn random(self: Sphere, origin: @Vector(3, f32)) @Vector(3, f32) {
+        _ = self;
+        _ = origin;
+
+        return math.init(1, 0, 0);
+    }
 };
 
 pub const Quad = struct {
@@ -334,6 +366,23 @@ pub const Quad = struct {
             vec[1],
             -sin_theta * vec[0] + cos_theta * vec[2],
         };
+    }
+
+    pub fn pdf_value(self: Quad, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+        var rec: HitRecord = undefined;
+        if (!self.hit(&Ray.init(origin, direction, null), Interval.init(0.001, std.math.inf(f32)), &rec)) {
+            return 0;
+        }
+
+        const distance_squared = rec.t * rec.t * math.square_magnitude(direction);
+        const cosine = @abs(math.dot(direction, rec.normal) / math.magnitude(direction));
+
+        return distance_squared / (cosine * self.area);
+    }
+
+    pub fn random(self: Quad, origin: @Vector(3, f32)) @Vector(3, f32) {
+        const p = self.Q + (math.scale(self.u, utils.random_double())) + (math.scale(self.v, utils.random_double()));
+        return p - origin;
     }
 };
 
@@ -505,6 +554,20 @@ pub const Box = struct {
         }
         self.bbox = AABB.init_from_points(min, max);
     }
+
+    pub fn pdf_value(self: Box, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+        _ = self;
+        _ = origin;
+        _ = direction;
+        return 0.0;
+    }
+
+    pub fn random(self: Box, origin: @Vector(3, f32)) @Vector(3, f32) {
+        _ = self;
+        _ = origin;
+
+        return math.init(1, 0, 0);
+    }
 };
 
 pub const ConstantMedium = struct {
@@ -587,5 +650,19 @@ pub const ConstantMedium = struct {
 
     pub fn rotate_y(self: *ConstantMedium, angle: f32) void {
         self.boundary.rotate_y(angle);
+    }
+
+    pub fn pdf_value(self: ConstantMedium, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+        _ = self;
+        _ = origin;
+        _ = direction;
+        return 0.0;
+    }
+
+    pub fn random(self: ConstantMedium, origin: @Vector(3, f32)) @Vector(3, f32) {
+        _ = self;
+        _ = origin;
+
+        return math.init(1, 0, 0);
     }
 };

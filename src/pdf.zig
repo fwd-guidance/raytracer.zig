@@ -61,3 +61,23 @@ pub const CosinePDF = struct {
         return self.uvw.transform(math.random_cosine_direction());
     }
 };
+
+pub const HittablePDF = struct {
+    objects: *const HittableList,
+    origin: @Vector(3, f32),
+
+    pub fn init(objects: *const HittableList, origin: @Vector(3, f32)) HittablePDF {
+        return .{
+            .objects = objects,
+            .origin = origin,
+        };
+    }
+
+    pub fn value(self: *const HittablePDF, direction: @Vector(3, f32)) f32 {
+        return self.objects.pdf_value(self.origin, direction);
+    }
+
+    pub fn generate(self: *const HittablePDF) @Vector(3, f32) {
+        return self.objects.random(self.origin);
+    }
+};

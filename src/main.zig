@@ -298,6 +298,12 @@ pub fn draw_cornell_box() !void {
 
     try world.build_bvh();
 
+    var lights = HittableList.init(allocator);
+    defer lights.deinit();
+
+    _ = try lights.add(.{ .Quad = Quad.init(init(343, 554, 332), init(-130, 0, 0), init(0, 0, -105), difflight_id) });
+    try lights.build_bvh();
+
     var cam: Camera = undefined;
     cam.aspect_ratio = 1.0;
     cam.image_width = 600;
@@ -312,7 +318,7 @@ pub fn draw_cornell_box() !void {
     cam.defocus_angle = 0.0;
     cam.focus_dist = 10.0;
 
-    try cam.render(&world);
+    try cam.render(&world, &lights);
 }
 
 pub fn draw_simple_light() !void {
