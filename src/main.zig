@@ -284,17 +284,26 @@ pub fn draw_cornell_box() !void {
     _ = try world.add(.{ .Quad = Quad.init(init(0, 0, 555), init(555, 0, 0), init(0, 0, -555), white_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(555, 0, 555), init(-555, 0, 0), init(0, 555, 0), white_id) });
     _ = try world.add(.{ .Quad = Quad.init(init(213, 554, 227), init(130, 0, 0), init(0, 0, 105), difflight_id) });
+
+    //const aluminum = Material.metal(init(0.8, 0.85, 0.88), 0.0);
+    //const aluminum_id = try world.add_material(aluminum);
+
     var box1 = try Box.init(init(0, 0, 0), init(165, 330, 165), white_id);
     box1.rotate_y(15.0);
     box1.translate(init(265, 0, 295));
 
     _ = try world.add(.{ .Box = box1 });
 
-    var box2 = try Box.init(init(0, 0, 0), init(165, 165, 165), white_id);
-    box2.rotate_y(-18.0);
-    box2.translate(init(130, 0, 65));
+    const glass = Material.dielectric(1.5);
+    const glass_id = try world.add_material(glass);
 
-    _ = try world.add(.{ .Box = box2 });
+    _ = try world.add(.{ .Sphere = Sphere.init(init(190, 90, 190), null, 90, glass_id) });
+
+    //var box2 = try Box.init(init(0, 0, 0), init(165, 165, 165), white_id);
+    //box2.rotate_y(-18.0);
+    //box2.translate(init(130, 0, 65));
+
+    //_ = try world.add(.{ .Box = box2 });
 
     try world.build_bvh();
 
@@ -302,6 +311,7 @@ pub fn draw_cornell_box() !void {
     defer lights.deinit();
 
     _ = try lights.add(.{ .Quad = Quad.init(init(343, 554, 332), init(-130, 0, 0), init(0, 0, -105), difflight_id) });
+    _ = try lights.add(.{ .Sphere = Sphere.init(init(190, 90, 190), null, 90, difflight_id) });
     try lights.build_bvh();
 
     var cam: Camera = undefined;

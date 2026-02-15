@@ -8,6 +8,16 @@ const Ray = math.Ray;
 const scene = @import("scene.zig");
 const HitRecord = scene.HitRecord;
 
+const pdf = @import("pdf.zig");
+const PDF = pdf.PDF;
+
+pub const ScatterRecord = struct {
+    attenuation: @Vector(3, f32),
+    pdf_value: ?PDF,
+    skip_pdf: bool,
+    skip_pdf_ray: Ray,
+};
+
 pub const Material = union(enum) {
     Lambertian: Lambertian,
     Metal: Metal,
@@ -35,13 +45,13 @@ pub const Material = union(enum) {
         return Material{ .Isotropic = Isotropic{ .tex_id = tex_id } };
     }
 
-    pub fn scatter(self: Material, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture, pdf: *f32) bool {
+    pub fn scatter(self: Material, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
         return switch (self) {
-            .Lambertian => |l| l.scatter(r_in, rec, attenuation, scattered, textures, pdf),
-            .Metal => |m| m.scatter(r_in, rec, attenuation, scattered, pdf),
-            .Dielectric => |d| d.scatter(r_in, rec, attenuation, scattered, pdf),
+            .Lambertian => |l| l.scatter(r_in, rec, srec, textures),
+            .Metal => |m| m.scatter(r_in, rec, srec),
+            .Dielectric => |d| d.scatter(r_in, rec, srec),
             .DiffuseLight => false,
-            .Isotropic => |i| i.scatter(r_in, rec, attenuation, scattered, textures, pdf),
+            .Isotropic => |i| i.scatter(r_in, rec, srec, textures),
         };
     }
 
@@ -65,25 +75,21 @@ pub const Lambertian = struct {
     tex_id: usize,
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture, pdf: *f32) bool {
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
+        _ = r_in;
         const texture = textures[self.tex_id];
-        const onb = math.OrthonormalBasis.init(rec.*.normal);
-        const scatter_direction = onb.transform(math.random_cosine_direction());
 
-        scattered.* = Ray.init(rec.*.p, math.unit(scatter_direction), r_in.*.tm);
-        attenuation.* = texture.value(rec.*.u, rec.*.v, rec.*.p);
-        pdf.* = math.dot(onb.w, scattered.direction) / std.math.pi;
+        srec.*.attenuation = texture.value(rec.u, rec.v, rec.p);
+        srec.*.pdf_value = pdf.PDF{ .cosine = pdf.CosinePDF.init(rec.normal) };
+        srec.*.skip_pdf = false;
         return true;
     }
 
     pub fn scattering_pdf(self: Lambertian, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
         _ = r_in;
         _ = self;
-        _ = rec;
-        _ = scattered;
-        //const cos_theta = math.dot(rec.normal, math.unit(scattered.direction));
-        //if (cos_theta < 0) return 0 else return cos_theta / std.math.pi;
-        return 1.0 / (2 * std.math.pi);
+        const cos_theta = math.dot(rec.normal, math.unit(scattered.direction));
+        if (cos_theta < 0) return 0 else return cos_theta / std.math.pi;
     }
 };
 
@@ -92,13 +98,14 @@ pub const Metal = struct {
     fuzz: f32,
     const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, pdf: *f32) bool {
-        _ = pdf;
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
         var reflected = math.reflect(&r_in.direction, &rec.normal);
         reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
-        scattered.* = Ray.init(rec.*.p, reflected, r_in.*.tm);
-        attenuation.* = self.albedo;
-        return math.dot(scattered.*.direction, rec.*.normal) > 0;
+        srec.*.attenuation = self.albedo;
+        srec.*.pdf_value = null;
+        srec.*.skip_pdf = true;
+        srec.*.skip_pdf_ray = Ray.init(rec.*.p, reflected, r_in.*.tm);
+        return true;
     }
 };
 
@@ -118,9 +125,11 @@ pub const Dielectric = struct {
         };
     }
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, pdf: *f32) bool {
-        _ = pdf;
-        attenuation.* = @Vector(3, f32){ 1.0, 1.0, 1.0 };
+    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
+        srec.*.attenuation = @Vector(3, f32){ 1.0, 1.0, 1.0 };
+        srec.*.pdf_value = null;
+        srec.*.skip_pdf = true;
+
         const ri: f32 = if (rec.*.front_face) 1.0 / self.refraction_index else self.refraction_index;
         const unit_direction = math.unit(r_in.*.direction);
         const cos_theta: f32 = @min(math.dot(math.invert(unit_direction), rec.*.normal), 1.0);
@@ -135,7 +144,7 @@ pub const Dielectric = struct {
             direction = math.refract(&unit_direction, rec.*.normal, ri);
         }
 
-        scattered.* = Ray.init(rec.*.p, direction, r_in.*.tm);
+        srec.*.skip_pdf_ray = Ray.init(rec.*.p, direction, r_in.*.tm);
         return true;
     }
 
@@ -159,11 +168,12 @@ pub const DiffuseLight = struct {
 pub const Isotropic = struct {
     tex_id: usize,
 
-    pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, attenuation: *@Vector(3, f32), scattered: *Ray, textures: []const Texture, pdf: *f32) bool {
+    pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
+        _ = r_in;
         const texture = textures[self.tex_id];
-        scattered.* = Ray.init(rec.*.p, math.random_unit_vector(), r_in.*.tm);
-        attenuation.* = texture.value(rec.*.u, rec.*.v, rec.*.p);
-        pdf.* = 1.0 / (4 * std.math.pi);
+        srec.*.attenuation = texture.value(rec.*.u, rec.*.v, rec.*.p);
+        srec.*.pdf_value = pdf.PDF{ .sphere = pdf.SpherePDF.init() };
+        srec.*.skip_pdf = false;
         return true;
     }
 

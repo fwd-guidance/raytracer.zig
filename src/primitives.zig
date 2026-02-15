@@ -216,17 +216,32 @@ pub const Sphere = struct {
     }
 
     pub fn pdf_value(self: Sphere, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
-        _ = self;
-        _ = origin;
-        _ = direction;
-        return 0.0;
+        var rec: HitRecord = undefined;
+        if (!self.hit(&Ray.init(origin, direction, null), Interval.init(0.001, std.math.inf(f32)), &rec)) return 0;
+
+        const dist_squared = math.square_magnitude(self.center.position(0) - origin);
+        const cos_theta_max = @sqrt(1 - self.radius_squared / dist_squared);
+        const solid_angle = 2 * std.math.pi * (1 - cos_theta_max);
+        return 1.0 / solid_angle;
     }
 
     pub fn random(self: Sphere, origin: @Vector(3, f32)) @Vector(3, f32) {
-        _ = self;
-        _ = origin;
+        const direction = self.center.position(0) - origin;
+        const distance_squared = math.square_magnitude(direction);
+        const onb = math.OrthonormalBasis.init(direction);
+        return onb.transform(random_to_sphere(self.radius_squared, distance_squared));
+    }
 
-        return math.init(1, 0, 0);
+    fn random_to_sphere(radius_squared: f32, distance_squared: f32) @Vector(3, f32) {
+        const r1 = utils.random_double();
+        const r2 = utils.random_double();
+        const z = 1 + r2 * (@sqrt(1 - radius_squared / distance_squared) - 1);
+
+        const phi = 2 * std.math.pi * r1;
+        const x = @cos(phi) * @sqrt(1 - z * z);
+        const y = @sin(phi) * @sqrt(1 - z * z);
+
+        return .{ x, y, z };
     }
 };
 

@@ -14,6 +14,7 @@ const AtomicValue = std.atomic.Value;
 const Interval = math.Interval;
 const random_double = utils.random_double;
 const material = @import("material.zig").Material;
+const ScatterRecord = @import("material.zig").ScatterRecord;
 
 pub const Camera = struct {
     samples_per_pixel: u32, //f32,
@@ -253,10 +254,7 @@ pub const Camera = struct {
             return camera.background;
         }
 
-        var scattered: Ray = undefined;
-        var attenuation: @Vector(3, f32) = undefined;
-        var pdf_value: f32 = undefined;
-
+        var srec: ScatterRecord = undefined;
         const mat = world.materials.items[rec.mat_id];
 
         // Get emitted color from the material (black for non-emissive materials)
@@ -264,23 +262,26 @@ pub const Camera = struct {
 
         // Try to scatter the ray
         // Use the unified Material.scatter() method or handle each case
-        const did_scatter = mat.scatter(&r, &rec, &attenuation, &scattered, world.textures.items, &pdf_value);
+        const did_scatter = mat.scatter(&r, &rec, &srec, world.textures.items);
 
         // If the material doesn't scatter, return only the emitted color
         if (!did_scatter) {
             return color_from_emission;
         }
 
-        const p0 = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
-        const p1 = pdf.PDF{ .cosine = pdf.CosinePDF.init(rec.normal) };
+        if (srec.skip_pdf) {
+            return srec.attenuation * ray_color(camera, srec.skip_pdf_ray, depth - 1, world, lights);
+        }
 
-        const mixture_pdf = pdf.MixturePDF.init(&p0, &p1);
-        scattered = Ray.init(rec.p, mixture_pdf.generate(), r.tm);
-        pdf_value = mixture_pdf.value(scattered.direction);
+        const light_pdf = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
+        const p = pdf.MixturePDF.init(&light_pdf, &srec.pdf_value.?);
+
+        var scattered = Ray.init(rec.p, p.generate(), r.tm);
+        const pdf_value = p.value(scattered.direction);
 
         const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
 
-        const color_from_scatter = (attenuation * math.init(scattering_pdf, scattering_pdf, scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.init(pdf_value, pdf_value, pdf_value);
+        const color_from_scatter = (srec.attenuation * math.init(scattering_pdf, scattering_pdf, scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.init(pdf_value, pdf_value, pdf_value);
 
         // Return combined emission and scatter
         return color_from_emission + color_from_scatter;
@@ -302,13 +303,17 @@ inline fn write_u8(writer: anytype, value: u8) !void {
 }
 
 pub fn write_color(writer: anytype, pixel_color: @Vector(3, f32)) !void {
-    //if (pixel_color[0] != pixel_color[0]) pixel_color[0] = 0.0;
-    //if (pixel_color[1] != pixel_color[1]) pixel_color[1] = 0.0;
-    //if (pixel_color[2] != pixel_color[2]) pixel_color[2] = 0.0;
+    var r = pixel_color[0];
+    var g = pixel_color[1];
+    var b = pixel_color[2];
 
-    const r: f32 = linear_to_gamma(pixel_color[0]);
-    const g: f32 = linear_to_gamma(pixel_color[1]);
-    const b: f32 = linear_to_gamma(pixel_color[2]);
+    if (r != r) r = 0.0;
+    if (g != g) g = 0.0;
+    if (b != b) b = 0.0;
+
+    r = linear_to_gamma(r);
+    g = linear_to_gamma(g);
+    b = linear_to_gamma(b);
 
     const intensity: Interval = Interval{ .min = 0.000, .max = 0.999 };
     const rbyte = @as(u8, @intFromFloat(256 * intensity.clamp(r)));
