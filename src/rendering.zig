@@ -8,7 +8,7 @@ const Ray = math.Ray;
 const HitRecord = scene.HitRecord;
 const std = @import("std");
 const Thread = std.Thread;
-const Mutex = std.Thread.Mutex;
+const Mutex = std.Io.Mutex;
 const AtomicValue = std.atomic.Value;
 
 const Interval = math.Interval;
@@ -66,7 +66,7 @@ pub const Camera = struct {
         self.v = math.cross(self.w, self.u);
 
         const viewport_u: @Vector(3, f32) = math.scale(self.u, viewport_width);
-        const viewport_v: @Vector(3, f32) = math.scale(math.invert(self.v), viewport_height);
+        const viewport_v: @Vector(3, f32) = math.scale(-self.v, viewport_height);
 
         self.pixel_delta_u = viewport_u * @as(@Vector(3, f32), @splat(1.0 / w_f));
         self.pixel_delta_v = viewport_v * @as(@Vector(3, f32), @splat(1.0 / h_f));
@@ -84,7 +84,7 @@ pub const Camera = struct {
 
     pub fn render(self: *Self, world: *const hittable_list, lights: *const hittable_list) !void {
         self.initialize();
-        self.mutex = Mutex{};
+        self.mutex = .init;
 
         // Use all available cores instead of a hard-coded 4.
         self.num_threads = Thread.getCpuCount() catch 4;
@@ -194,9 +194,11 @@ pub const Camera = struct {
 
         // Write output
 
-        const stdout_file = std.fs.File.stdout();
+        const stdout_file = std.Io.File.stdout();
         var buffer: [65536]u8 = undefined; // larger output buffer reduces syscall count
-        var writer = stdout_file.writer(&buffer);
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
+        var writer = stdout_file.writer(io, &buffer);
 
         try writer.interface.print("P3\n{d} {d} \n255\n", .{ width, height });
 

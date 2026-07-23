@@ -36,7 +36,7 @@ pub const HitRecord = struct {
         // NOTE: the parameter outward_normal is assumed to have unit length
 
         self.*.front_face = (math.dot(r.direction, outward_normal.*)) < 0;
-        self.*.normal = if (self.*.front_face) outward_normal.* else math.invert(outward_normal.*);
+        self.*.normal = if (self.*.front_face) outward_normal.* else -(outward_normal.*);
     }
 };
 
@@ -56,13 +56,13 @@ pub const HittableList = struct {
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
-            .spheres = ArrayList(Sphere){},
-            .quads = ArrayList(Quad){},
-            .boxes = ArrayList(Box){},
-            .constant_mediums = ArrayList(ConstantMedium){},
-            .materials = ArrayList(Material){},
-            .textures = ArrayList(Texture){},
-            .images = ArrayList(RTWImage){},
+            .spheres = .empty,
+            .quads = .empty,
+            .boxes = .empty,
+            .constant_mediums = .empty,
+            .materials = .empty,
+            .textures = .empty,
+            .images = .empty,
             .bvh_root = null,
             .bbox = AABB.empty(),
             .allocator = allocator,

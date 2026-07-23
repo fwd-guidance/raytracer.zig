@@ -132,7 +132,7 @@ pub const Dielectric = struct {
 
         const ri: f32 = if (rec.*.front_face) 1.0 / self.refraction_index else self.refraction_index;
         const unit_direction = math.unit(r_in.*.direction);
-        const cos_theta: f32 = @min(math.dot(math.invert(unit_direction), rec.*.normal), 1.0);
+        const cos_theta: f32 = @min(math.dot(-(unit_direction), rec.*.normal), 1.0);
         const sin_theta: f32 = @sqrt(1.0 - cos_theta * cos_theta);
 
         const cannot_refract: bool = (ri * sin_theta) > 1.0;

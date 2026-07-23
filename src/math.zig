@@ -2,15 +2,15 @@ const std = @import("std");
 const utils = @import("utils.zig");
 
 pub fn init(x: f32, y: f32, z: f32) @Vector(3, f32) {
-    return @Vector(3, f32){ x, y, z };
+    return .{ x, y, z };
 }
 
 pub fn random_vec() @Vector(3, f32) {
-    return @Vector(3, f32){ utils.random_double(), utils.random_double(), utils.random_double() };
+    return .{ utils.random_double(), utils.random_double(), utils.random_double() };
 }
 
 pub fn random_vec_range(min: f32, max: f32) @Vector(3, f32) {
-    return @Vector(3, f32){ utils.random_double_range(min, max), utils.random_double_range(min, max), utils.random_double_range(min, max) };
+    return .{ utils.random_double_range(min, max), utils.random_double_range(min, max), utils.random_double_range(min, max) };
 }
 
 pub fn add(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
@@ -19,10 +19,6 @@ pub fn add(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
 
 pub fn scale(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
     return v * init(scalar, scalar, scalar);
-}
-
-pub fn invert(v: @Vector(3, f32)) @Vector(3, f32) {
-    return -v;
 }
 
 pub fn magnitude(v: @Vector(3, f32)) f32 {
@@ -78,7 +74,7 @@ pub fn random_on_hemisphere(normal: @Vector(3, f32)) @Vector(3, f32) {
     if (dot(on_unit_sphere, normal) > 0.0) {
         return on_unit_sphere;
     } else {
-        return invert(on_unit_sphere);
+        return -on_unit_sphere;
     }
 }
 
@@ -87,7 +83,7 @@ pub fn reflect(v: *const @Vector(3, f32), n: *const @Vector(3, f32)) @Vector(3, 
 }
 
 pub fn refract(uv: *const @Vector(3, f32), n: @Vector(3, f32), etai_over_etat: f32) @Vector(3, f32) {
-    const cos_theta: f32 = @min(dot(invert(uv.*), n), 1.0);
+    const cos_theta: f32 = @min(dot((-uv.*), n), 1.0);
     const r_out_perp = scale(uv.* + scale(n, cos_theta), etai_over_etat);
     const r_out_parallel = scale(n, -@sqrt(@abs(1.0 - square_magnitude(r_out_perp))));
     return r_out_perp + r_out_parallel;
