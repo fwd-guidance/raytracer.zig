@@ -46,13 +46,13 @@ pub const Camera = struct {
     const Self = @This();
 
     pub fn initialize(self: *Self) void {
-        const w_f = @as(f32, @floatFromInt(self.image_width));
-        const h_f = @as(f32, @floatFromInt(@max(1, @as(u32, @intFromFloat(w_f / self.aspect_ratio)))));
-        self.image_height = @as(u32, @intFromFloat(h_f));
+        const w_f = math.tof32(self.image_width);
+        const h_f = math.tof32(@max(1, math.tou32(w_f / self.aspect_ratio)));
+        self.image_height = math.tou32(h_f);
 
-        self.sqrt_samples_per_pixel = @as(u32, @intFromFloat(@sqrt(@as(f32, @floatFromInt(self.samples_per_pixel)))));
-        self.pixel_samples_scale = 1.0 / @as(f32, @floatFromInt(self.sqrt_samples_per_pixel * self.sqrt_samples_per_pixel));
-        self.recip_sqrt_samples_per_pixel = 1.0 / @as(f32, @floatFromInt(self.sqrt_samples_per_pixel));
+        self.sqrt_samples_per_pixel = math.tou32(@sqrt(math.tof32(self.samples_per_pixel)));
+        self.pixel_samples_scale = 1.0 / math.tof32(self.sqrt_samples_per_pixel * self.sqrt_samples_per_pixel);
+        self.recip_sqrt_samples_per_pixel = 1.0 / math.tof32(self.sqrt_samples_per_pixel);
 
         self.center = self.lookfrom;
 
@@ -68,8 +68,8 @@ pub const Camera = struct {
         const viewport_u: @Vector(3, f32) = math.scale(self.u, viewport_width);
         const viewport_v: @Vector(3, f32) = math.scale(-self.v, viewport_height);
 
-        self.pixel_delta_u = viewport_u * @as(@Vector(3, f32), @splat(1.0 / w_f));
-        self.pixel_delta_v = viewport_v * @as(@Vector(3, f32), @splat(1.0 / h_f));
+        self.pixel_delta_u = viewport_u * math.vec3s(1.0 / w_f);
+        self.pixel_delta_v = viewport_v * math.vec3s(1.0 / h_f);
 
         const viewport_upper_left: @Vector(3, f32) = self.center -
             math.scale(self.w, self.focus_dist) -
@@ -214,12 +214,12 @@ pub const Camera = struct {
     /// Uses integer pixel coords and splat for broadcasting.
     fn get_ray(self: *Self, i: u32, j: u32, s_i: u32, s_j: u32) Ray {
         const offset: @Vector(3, f32) = sample_square_stratified(self, s_i, s_j);
-        const fi = @as(f32, @floatFromInt(i));
-        const fj = @as(f32, @floatFromInt(j));
+        const fi = math.tof32(i);
+        const fj = math.tof32(j);
         const pixel_sample: @Vector(3, f32) =
             self.pixel00_loc +
-            @as(@Vector(3, f32), @splat(fi + offset[0])) * self.pixel_delta_u +
-            @as(@Vector(3, f32), @splat(fj + offset[1])) * self.pixel_delta_v;
+            math.vec3s(fi + offset[0]) * self.pixel_delta_u +
+            math.vec3s(fj + offset[1]) * self.pixel_delta_v;
         const ray_origin: @Vector(3, f32) = if (self.defocus_angle <= 0) self.center else defocus_disk_sample(self);
         const ray_direction: @Vector(3, f32) = pixel_sample - ray_origin;
         const ray_time: f32 = random_double();
@@ -228,8 +228,8 @@ pub const Camera = struct {
     }
 
     fn sample_square_stratified(self: *Self, s_i: u32, s_j: u32) @Vector(3, f32) {
-        const px = ((@as(f32, @floatFromInt(s_i)) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
-        const py = ((@as(f32, @floatFromInt(s_j)) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
+        const px = ((math.tof32(s_i) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
+        const py = ((math.tof32(s_j) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
         return @Vector(3, f32){ px, py, 0 };
     }
 
@@ -249,10 +249,7 @@ pub const Camera = struct {
         if (depth <= 0) return math.init(0, 0, 0);
 
         var rec: HitRecord = undefined;
-        const hit_result = world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec);
-
-        // If the ray hits nothing, return the background color
-        if (!(try hit_result)) {
+        if (!world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
             return camera.background;
         }
 
@@ -283,7 +280,7 @@ pub const Camera = struct {
 
         const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
 
-        const color_from_scatter = (srec.attenuation * math.init(scattering_pdf, scattering_pdf, scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.init(pdf_value, pdf_value, pdf_value);
+        const color_from_scatter = (srec.attenuation * math.vec3s(scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.vec3s(pdf_value);
 
         // Return combined emission and scatter
         return color_from_emission + color_from_scatter;

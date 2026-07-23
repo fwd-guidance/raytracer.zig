@@ -115,15 +115,11 @@ pub const Sphere = struct {
     }
 
     pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        // NOTE: a little sus of this "optimization" of hoisting field accesses. feels like something the compiler would handle itself
-        const ray_origin = r.origin;
-        const ray_dir = r.direction;
-
         const current_center = self.center.position(r.tm);
 
-        const oc = current_center - ray_origin;
-        const a: f32 = math.square_magnitude(ray_dir);
-        const h: f32 = math.dot(ray_dir, oc);
+        const oc = current_center - r.origin;
+        const a: f32 = math.square_magnitude(r.direction);
+        const h: f32 = math.dot(r.direction, oc);
         const c: f32 = math.square_magnitude(oc) - self.radius_squared;
 
         const discriminant: f32 = h * h - a * c;
@@ -144,7 +140,7 @@ pub const Sphere = struct {
         rec.*.t = root;
 
         rec.*.p = r.position(root);
-        const outward_normal: @Vector(3, f32) = (rec.*.p - current_center) * @as(@Vector(3, f32), @splat(self.inv_radius));
+        const outward_normal: @Vector(3, f32) = (rec.*.p - current_center) * math.vec3s(self.inv_radius);
         rec.set_face_normal(r, &outward_normal);
 
         get_sphere_uv(outward_normal, rec);
@@ -265,7 +261,7 @@ pub const Quad = struct {
         const n = math.cross(u, v);
         const normal = math.unit(n);
 
-        const w = n / @as(@Vector(3, f32), @splat(math.dot(n, n)));
+        const w = n / math.vec3s(math.dot(n, n));
         const u_perp = math.cross(v, w);
         const v_perp = math.cross(w, u);
         return .{
@@ -362,7 +358,7 @@ pub const Quad = struct {
         // Recompute derived values
         const n = math.cross(self.u, self.v);
         self.normal = math.unit(n);
-        self.w = n / @as(@Vector(3, f32), @splat(math.dot(n, n)));
+        self.w = n / math.vec3s(math.dot(n, n));
         self.D = math.dot(self.normal, self.Q);
 
         self.u_perp = math.cross(self.v, self.w);
@@ -417,8 +413,8 @@ pub const Box = struct {
         const min = @Vector(3, f32){ @min(a[0], b[0]), @min(a[1], b[1]), @min(a[2], b[2]) };
         const max = @Vector(3, f32){ @max(a[0], b[0]), @max(a[1], b[1]), @max(a[2], b[2]) };
 
-        const center = (min + max) * @as(@Vector(3, f32), @splat(0.5));
-        const half_size = (max - min) * @as(@Vector(3, f32), @splat(0.5));
+        const center = (min + max) * math.vec3s(0.5);
+        const half_size = (max - min) * math.vec3s(0.5);
 
         return Self{
             .bbox = AABB.init_from_points(min, max),
@@ -456,7 +452,7 @@ pub const Box = struct {
 
         // Precompute inverse direction for speed (handle div by zero safely or use big number)
         // Note: Zig's vectors handle 1.0/0.0 as Inf, which works with @min/@max logic usually.
-        const inv_d = @as(@Vector(3, f32), @splat(1.0)) / local_dir;
+        const inv_d = math.vec3s(1.0) / local_dir;
 
         const t0 = (-self.half_size - local_origin) * inv_d;
         const t1 = (self.half_size - local_origin) * inv_d;

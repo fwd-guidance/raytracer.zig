@@ -259,7 +259,9 @@ fn box_compare(a: Primitive, b: Primitive, axis: u8) bool {
     }
 }
 
-// Helper function to sort spheres by a given axis
+// Helper function to sort primitives by a given axis.
+// Uses pdq sort (O(n log n)) for large slices, falling back to insertion
+// sort for small slices where the constant factor wins.
 fn sort_primitives_by_axis(objects: []Primitive, axis: u8) void {
     const Context = struct {
         axis: u8,
@@ -268,9 +270,11 @@ fn sort_primitives_by_axis(objects: []Primitive, axis: u8) void {
         }
     };
 
-    std.sort.insertion(Primitive, objects, Context{ .axis = axis }, Context.lessThan);
-
-    //std.sort.pdq(Sphere, objects, Context{ .axis = axis }, Context.lessThan);
+    if (objects.len <= 32) {
+        std.sort.insertion(Primitive, objects, Context{ .axis = axis }, Context.lessThan);
+    } else {
+        std.sort.pdq(Primitive, objects, Context{ .axis = axis }, Context.lessThan);
+    }
 }
 
 // Helper to create a hittable from a sphere

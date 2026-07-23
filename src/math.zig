@@ -1,6 +1,30 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 
+// ---------------------------------------------------------------------------
+// Comptime helpers to cut down @-builtin verbosity
+// ---------------------------------------------------------------------------
+
+/// Broadcast a scalar (any numeric type) into a @Vector(3, f32).
+pub inline fn vec3s(x: anytype) @Vector(3, f32) {
+    return @as(@Vector(3, f32), @splat(@floatCast(x)));
+}
+
+/// Convert an integer to f32.
+pub inline fn tof32(x: anytype) f32 {
+    return @floatFromInt(x);
+}
+
+/// Convert a float to u32.
+pub inline fn tou32(x: anytype) u32 {
+    return @intFromFloat(x);
+}
+
+/// Convert a float to i32 via bitcast (wrapping for Perlin grid indexing).
+pub inline fn floorToU8(x: f32) u8 {
+    return @as(u8, @truncate(@as(u32, @bitCast(@as(i32, @intFromFloat(x))))));
+}
+
 pub fn init(x: f32, y: f32, z: f32) @Vector(3, f32) {
     return .{ x, y, z };
 }
@@ -14,11 +38,11 @@ pub fn random_vec_range(min: f32, max: f32) @Vector(3, f32) {
 }
 
 pub fn add(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
-    return v + init(scalar, scalar, scalar);
+    return v + vec3s(scalar);
 }
 
 pub fn scale(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
-    return v * init(scalar, scalar, scalar);
+    return v * vec3s(scalar);
 }
 
 pub fn magnitude(v: @Vector(3, f32)) f32 {
@@ -36,7 +60,7 @@ pub fn near_zero(self: @Vector(3, f32)) bool {
 
 pub fn unit(v: @Vector(3, f32)) @Vector(3, f32) {
     const len = magnitude(v);
-    return v / @as(@Vector(3, f32), @splat(len));
+    return v / vec3s(len);
 }
 
 pub fn random_in_unit_disk() @Vector(3, f32) {
@@ -78,13 +102,13 @@ pub fn random_on_hemisphere(normal: @Vector(3, f32)) @Vector(3, f32) {
     }
 }
 
-pub fn reflect(v: *const @Vector(3, f32), n: *const @Vector(3, f32)) @Vector(3, f32) {
-    return @constCast(v).* - scale(@constCast(n).*, dot(@constCast(v).*, @constCast(n).*) * 2);
+pub fn reflect(v: @Vector(3, f32), n: @Vector(3, f32)) @Vector(3, f32) {
+    return v - scale(n, dot(v, n) * 2);
 }
 
-pub fn refract(uv: *const @Vector(3, f32), n: @Vector(3, f32), etai_over_etat: f32) @Vector(3, f32) {
-    const cos_theta: f32 = @min(dot((-uv.*), n), 1.0);
-    const r_out_perp = scale(uv.* + scale(n, cos_theta), etai_over_etat);
+pub fn refract(uv: @Vector(3, f32), n: @Vector(3, f32), etai_over_etat: f32) @Vector(3, f32) {
+    const cos_theta: f32 = @min(dot(-uv, n), 1.0);
+    const r_out_perp = scale(uv + scale(n, cos_theta), etai_over_etat);
     const r_out_parallel = scale(n, -@sqrt(@abs(1.0 - square_magnitude(r_out_perp))));
     return r_out_perp + r_out_parallel;
 }
@@ -112,9 +136,9 @@ pub const OrthonormalBasis = struct {
     }
 
     pub fn transform(self: OrthonormalBasis, v: @Vector(3, f32)) @Vector(3, f32) {
-        const scaled_u = self.u * @as(@Vector(3, f32), @splat(v[0]));
-        const scaled_v = self.v * @as(@Vector(3, f32), @splat(v[1]));
-        const scaled_w = self.w * @as(@Vector(3, f32), @splat(v[2]));
+        const scaled_u = self.u * vec3s(v[0]);
+        const scaled_v = self.v * vec3s(v[1]);
+        const scaled_w = self.w * vec3s(v[2]);
 
         return scaled_u + scaled_v + scaled_w;
     }

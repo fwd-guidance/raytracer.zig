@@ -54,9 +54,9 @@ pub const Checker = struct {
     odd: *const Texture,
 
     pub fn value(self: Checker, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
-        const x = @as(i32, @intFromFloat(@floor(self.inv_scale * p[0])));
-        const y = @as(i32, @intFromFloat(@floor(self.inv_scale * p[1])));
-        const z = @as(i32, @intFromFloat(@floor(self.inv_scale * p[2])));
+        const x: i32 = @intFromFloat(@floor(self.inv_scale * p[0]));
+        const y: i32 = @intFromFloat(@floor(self.inv_scale * p[1]));
+        const z: i32 = @intFromFloat(@floor(self.inv_scale * p[2]));
 
         const is_even = @mod(x + y + z, 2) == 0;
 
@@ -79,16 +79,16 @@ pub const Image = struct {
         const clamped_u = clamp(u, 0.0, 1.0);
         const clamped_v = 1.0 - clamp(v, 0.0, 1.0); // Flip V to image coordinates
 
-        const i = @as(i32, @intFromFloat(clamped_u * @as(f32, @floatFromInt(self.image.width()))));
-        const j = @as(i32, @intFromFloat(clamped_v * @as(f32, @floatFromInt(self.image.height()))));
+        const i: i32 = @intFromFloat(clamped_u * math.tof32(self.image.width()));
+        const j: i32 = @intFromFloat(clamped_v * math.tof32(self.image.height()));
 
         const pixel = self.image.pixel_data(i, j);
 
         const color_scale = 1.0 / 255.0;
         return @Vector(3, f32){
-            color_scale * @as(f32, @floatFromInt(pixel[0])),
-            color_scale * @as(f32, @floatFromInt(pixel[1])),
-            color_scale * @as(f32, @floatFromInt(pixel[2])),
+            color_scale * math.tof32(pixel[0]),
+            color_scale * math.tof32(pixel[1]),
+            color_scale * math.tof32(pixel[2]),
         };
     }
 
@@ -114,7 +114,6 @@ pub const Noise = struct {
         _ = u;
         _ = v;
 
-        const half_vec = @Vector(3, f32){ 0.5, 0.5, 0.5 };
-        return math.scale(half_vec, (1 + std.math.sin(self.scale * p[0] + 10 * self.perlin.turb(p, 7))));
+        return math.scale(math.vec3s(0.5), (1 + std.math.sin(self.scale * p[0] + 10 * self.perlin.turb(p, 7))));
     }
 };

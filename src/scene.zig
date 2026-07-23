@@ -137,7 +137,7 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) !bool {
+    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
         return self.bvh_root.?.hit(r, ray_t, rec);
     }
 
@@ -200,7 +200,7 @@ pub const HittableList = struct {
     }
 
     pub fn pdf_value(self: *const HittableList, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
-        const weight = 1.0 / @as(f32, @floatFromInt(self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len));
+        const weight = 1.0 / math.tof32(self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len);
         var sum: f32 = 0.0;
 
         for (self.spheres.items) |s| {
@@ -223,20 +223,23 @@ pub const HittableList = struct {
     }
 
     pub fn random(self: *const HittableList, origin: @Vector(3, f32)) @Vector(3, f32) {
-        const int_size = @as(f32, @floatFromInt(self.spheres.items.len + self.quads.items.len + self.boxes.items.len));
-        var index: usize = @intCast(utils.random_int(0, int_size - 1));
+        const total = self.spheres.items.len +
+            self.quads.items.len +
+            self.boxes.items.len +
+            self.constant_mediums.items.len;
+        const index: usize = @intCast(utils.random_int(0, math.tof32(total) - 1));
 
         if (index < self.spheres.items.len) {
             return self.spheres.items[index].random(origin);
-        } else if (index < (self.spheres.items.len + self.quads.items.len)) {
-            index = index % self.spheres.items.len;
-            return self.quads.items[index].random(origin);
-        } else if (index < (self.spheres.items.len + self.quads.items.len + self.boxes.items.len)) {
-            index = index % (self.spheres.items.len + self.quads.items.len + self.boxes.items.len);
-            return self.boxes.items[index].random(origin);
-        } else {
-            index = index % (self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len);
-            return self.constant_mediums.items[index].random(origin);
         }
+        const after_spheres = self.spheres.items.len;
+        if (index < after_spheres + self.quads.items.len) {
+            return self.quads.items[index - after_spheres].random(origin);
+        }
+        const after_quads = after_spheres + self.quads.items.len;
+        if (index < after_quads + self.boxes.items.len) {
+            return self.boxes.items[index - after_quads].random(origin);
+        }
+        return self.constant_mediums.items[index - after_quads - self.boxes.items.len].random(origin);
     }
 };

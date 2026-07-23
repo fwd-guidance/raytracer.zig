@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("math.zig");
 
 // ---------------------------------------------------------------------------
 // Thread-local PRNG: std.Random.Xoroshiro128
@@ -107,9 +108,9 @@ pub const Perlin = struct {
         const w = frac[2] * frac[2] * (3.0 - 2.0 * frac[2]);
 
         // Convert to grid indices once
-        const i = @as(u8, @truncate(@as(u32, @bitCast(@as(i32, @intFromFloat(floored[0]))))));
-        const j = @as(u8, @truncate(@as(u32, @bitCast(@as(i32, @intFromFloat(floored[1]))))));
-        const k = @as(u8, @truncate(@as(u32, @bitCast(@as(i32, @intFromFloat(floored[2]))))));
+        const i = math.floorToU8(floored[0]);
+        const j = math.floorToU8(floored[1]);
+        const k = math.floorToU8(floored[2]);
 
         // Unroll the corner lookups completely - this is much faster than nested loops
         // Pre-compute all indices
@@ -155,27 +156,27 @@ pub const Perlin = struct {
             // Most common case - fully unrolled
             accum += weight * self.noise(temp_p);
             weight *= 0.5;
-            temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+            temp_p = temp_p * math.vec3s(2.0);
 
             accum += weight * self.noise(temp_p);
             weight *= 0.5;
-            temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+            temp_p = temp_p * math.vec3s(2.0);
 
             accum += weight * self.noise(temp_p);
             weight *= 0.5;
-            temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+            temp_p = temp_p * math.vec3s(2.0);
 
             accum += weight * self.noise(temp_p);
             weight *= 0.5;
-            temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+            temp_p = temp_p * math.vec3s(2.0);
 
             accum += weight * self.noise(temp_p);
             weight *= 0.5;
-            temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+            temp_p = temp_p * math.vec3s(2.0);
 
             accum += weight * self.noise(temp_p);
             weight *= 0.5;
-            temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+            temp_p = temp_p * math.vec3s(2.0);
 
             accum += weight * self.noise(temp_p);
         } else {
@@ -183,7 +184,7 @@ pub const Perlin = struct {
             for (0..depth) |_| {
                 accum += weight * self.noise(temp_p);
                 weight *= 0.5;
-                temp_p = temp_p * @as(@Vector(3, f32), @splat(2.0));
+                temp_p = temp_p * math.vec3s(2.0);
             }
         }
 

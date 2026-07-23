@@ -99,7 +99,7 @@ pub const Metal = struct {
     const Self = @This();
 
     pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
-        var reflected = math.reflect(&r_in.direction, &rec.normal);
+        var reflected = math.reflect(r_in.direction, rec.normal);
         reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
         srec.*.attenuation = self.albedo;
         srec.*.pdf_value = null;
@@ -139,9 +139,9 @@ pub const Dielectric = struct {
         var direction: @Vector(3, f32) = undefined;
 
         if (cannot_refract or (self.reflectance(cos_theta) > utils.random_double())) {
-            direction = math.reflect(&unit_direction, &rec.*.normal);
+            direction = math.reflect(unit_direction, rec.*.normal);
         } else {
-            direction = math.refract(&unit_direction, rec.*.normal, ri);
+            direction = math.refract(unit_direction, rec.*.normal, ri);
         }
 
         srec.*.skip_pdf_ray = Ray.init(rec.*.p, direction, r_in.*.tm);
