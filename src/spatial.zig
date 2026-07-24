@@ -141,8 +141,6 @@ pub const BVHNode = struct {
     right: *Hittable,
     bbox: AABB,
 
-    const Self = @This();
-
     // Construct a bounding volume hierarchy node from a range of hittables
     pub fn init_from_list(allocator: std.mem.Allocator, objects: []Primitive) !*BVHNode {
         return try init_from_span(allocator, objects, 0, objects.len);
@@ -185,7 +183,7 @@ pub const BVHNode = struct {
         return node;
     }
 
-    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *BVHNode, allocator: std.mem.Allocator) void {
         self.left.deinit(allocator);
         if (self.right != self.left) { // Avoid double-freeing if both point to same object
             self.right.deinit(allocator);
@@ -193,7 +191,7 @@ pub const BVHNode = struct {
         allocator.destroy(self);
     }
 
-    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn hit(self: BVHNode, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
         // OPTIONAL: Check self.bbox first.
         // (Can be removed if you trust the parent logic, but safe to keep for root).
         //if (self.bbox.hit_distance(r, ray_t) == null) return false;
@@ -241,7 +239,7 @@ pub const BVHNode = struct {
         }
     }
 
-    pub fn bounding_box(self: Self) AABB {
+    pub fn bounding_box(self: BVHNode) AABB {
         return self.bbox;
     }
 };

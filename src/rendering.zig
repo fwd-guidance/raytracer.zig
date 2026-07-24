@@ -43,9 +43,8 @@ pub const Camera = struct {
     background: @Vector(3, f32),
     sqrt_samples_per_pixel: u32,
     recip_sqrt_samples_per_pixel: f32,
-    const Self = @This();
 
-    pub fn initialize(self: *Self) void {
+    pub fn initialize(self: *Camera) void {
         const w_f = math.tof32(self.image_width);
         const h_f = math.tof32(@max(1, math.tou32(w_f / self.aspect_ratio)));
         self.image_height = math.tou32(h_f);
@@ -82,7 +81,7 @@ pub const Camera = struct {
         self.defocus_disk_v = math.scale(self.v, defocus_radius);
     }
 
-    pub fn render(self: *Self, world: *const hittable_list, lights: *const hittable_list) !void {
+    pub fn render(self: *Camera, world: *const hittable_list, lights: *const hittable_list) !void {
         self.initialize();
         self.mutex = .init;
 
@@ -212,7 +211,7 @@ pub const Camera = struct {
 
     /// Construct a camera ray for pixel (i, j) with a random sub-pixel offset.
     /// Uses integer pixel coords and splat for broadcasting.
-    fn get_ray(self: *Self, i: u32, j: u32, s_i: u32, s_j: u32) Ray {
+    fn get_ray(self: *Camera, i: u32, j: u32, s_i: u32, s_j: u32) Ray {
         const offset: @Vector(3, f32) = sample_square_stratified(self, s_i, s_j);
         const fi = math.tof32(i);
         const fj = math.tof32(j);
@@ -227,7 +226,7 @@ pub const Camera = struct {
         return Ray.init(ray_origin, ray_direction, ray_time);
     }
 
-    fn sample_square_stratified(self: *Self, s_i: u32, s_j: u32) @Vector(3, f32) {
+    fn sample_square_stratified(self: *Camera, s_i: u32, s_j: u32) @Vector(3, f32) {
         const px = ((math.tof32(s_i) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
         const py = ((math.tof32(s_j) + random_double()) * self.recip_sqrt_samples_per_pixel) - 0.5;
         return @Vector(3, f32){ px, py, 0 };
@@ -237,14 +236,14 @@ pub const Camera = struct {
         return math.init(random_double() - 0.5, random_double() - 0.5, 0);
     }
 
-    fn defocus_disk_sample(self: *Self) @Vector(3, f32) {
+    fn defocus_disk_sample(self: *Camera) @Vector(3, f32) {
         const p = math.random_in_unit_disk();
         return self.center + math.scale(self.defocus_disk_u, p[0]) + math.scale(self.defocus_disk_v, p[1]);
     }
 
     /// Recursive ray colour with emissive material support.
     /// Returns the color contribution from both emitted light and scattered rays.
-    fn ray_color(camera: *const Self, r: Ray, depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
+    fn ray_color(camera: *const Camera, r: Ray, depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
         // If we've exceeded the ray bounce limit, no more light is gathered
         if (depth <= 0) return math.init(0, 0, 0);
 

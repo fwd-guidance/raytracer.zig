@@ -81,9 +81,7 @@ pub const Sphere = struct {
     moving: bool,
     bbox: AABB,
 
-    const Self = @This();
-
-    pub fn init(center: @Vector(3, f32), center_two: ?@Vector(3, f32), radius: f32, mat_id: usize) Self {
+    pub fn init(center: @Vector(3, f32), center_two: ?@Vector(3, f32), radius: f32, mat_id: usize) Sphere {
         const radius_vec = math.init(radius, radius, radius);
         var bbox = AABB.init_from_points(center - radius_vec, center + radius_vec);
         var center_ray = Ray.init(center, math.init(0, 0, 0), null);
@@ -95,7 +93,7 @@ pub const Sphere = struct {
             bbox = AABB.merge(box1, box2);
         }
 
-        return Self{
+        return .{
             .center = center_ray,
             .radius = radius,
             .inv_radius = 1.0 / radius,
@@ -114,7 +112,7 @@ pub const Sphere = struct {
         return bbox;
     }
 
-    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn hit(self: Sphere, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         const current_center = self.center.position(r.tm);
 
         const oc = current_center - r.origin;
@@ -165,7 +163,7 @@ pub const Sphere = struct {
         rec.*.v = theta / std.math.pi;
     }
 
-    pub fn bounding_box(self: Self) AABB {
+    pub fn bounding_box(self: Sphere) AABB {
         const r_vec = @Vector(3, f32){ self.radius, self.radius, self.radius };
 
         if (self.moving) {
@@ -184,7 +182,7 @@ pub const Sphere = struct {
         self.bbox.add(offset);
     }
 
-    pub fn rotate_y(self: *Self, angle: f32) void {
+    pub fn rotate_y(self: *Sphere, angle: f32) void {
         const radians = std.math.degreesToRadians(angle);
         const sin_theta = @sin(radians);
         const cos_theta = @cos(radians);
@@ -407,16 +405,14 @@ pub const Box = struct {
     sin_theta: f32,
     cos_theta: f32,
 
-    const Self = @This();
-
-    pub fn init(a: @Vector(3, f32), b: @Vector(3, f32), mat_id: usize) !Self {
+    pub fn init(a: @Vector(3, f32), b: @Vector(3, f32), mat_id: usize) !Box {
         const min = @Vector(3, f32){ @min(a[0], b[0]), @min(a[1], b[1]), @min(a[2], b[2]) };
         const max = @Vector(3, f32){ @max(a[0], b[0]), @max(a[1], b[1]), @max(a[2], b[2]) };
 
         const center = (min + max) * math.vec3s(0.5);
         const half_size = (max - min) * math.vec3s(0.5);
 
-        return Self{
+        return .{
             .bbox = AABB.init_from_points(min, max),
             .center = center,
             .half_size = half_size,
@@ -426,7 +422,7 @@ pub const Box = struct {
         };
     }
 
-    pub fn hit(self: Self, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn hit(self: Box, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         // 1. Translate Ray to Box Local Space
         // (Treat the box center as 0,0,0)
         const origin_diff = r.origin - self.center;
@@ -506,16 +502,16 @@ pub const Box = struct {
         return true;
     }
 
-    pub fn bounding_box(self: Self) AABB {
+    pub fn bounding_box(self: Box) AABB {
         return self.bbox;
     }
 
-    pub fn translate(self: *Self, offset: @Vector(3, f32)) void {
+    pub fn translate(self: *Box, offset: @Vector(3, f32)) void {
         self.center += offset;
         self.bbox = self.bbox.add(offset);
     }
 
-    pub fn rotate_y(self: *Self, angle: f32) void {
+    pub fn rotate_y(self: *Box, angle: f32) void {
         const radians = std.math.degreesToRadians(angle);
         const sin_t = @sin(radians);
         const cos_t = @cos(radians);

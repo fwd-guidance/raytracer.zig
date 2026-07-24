@@ -46,16 +46,20 @@ pub fn scale(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
 }
 
 pub fn magnitude(v: @Vector(3, f32)) f32 {
-    return @sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    //return @sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    return @sqrt(@reduce(.Add, v * v));
 }
 
 pub fn square_magnitude(v: @Vector(3, f32)) f32 {
-    return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    //return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    return @reduce(.Add, v * v);
 }
 
 pub fn near_zero(self: @Vector(3, f32)) bool {
-    const s: f32 = 1e-8;
-    return (@abs(self[0]) < s) and (@abs(self[1]) < s) and (@abs(self[2]) < s);
+    //const s: f32 = 1e-8;
+    const s: @Vector(3, f32) = @splat(1e-8);
+    //return (@abs(self[0]) < s) and (@abs(self[1]) < s) and (@abs(self[2]) < s);
+    return @reduce(.And, @abs(self) < s);
 }
 
 pub fn unit(v: @Vector(3, f32)) @Vector(3, f32) {
@@ -114,7 +118,8 @@ pub fn refract(uv: @Vector(3, f32), n: @Vector(3, f32), etai_over_etat: f32) @Ve
 }
 
 pub fn dot(u: @Vector(3, f32), v: @Vector(3, f32)) f32 {
-    return (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]);
+    //return (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]);
+    return @reduce(.Add, u * v);
 }
 
 pub fn cross(u: @Vector(3, f32), v: @Vector(3, f32)) @Vector(3, f32) {
@@ -147,24 +152,23 @@ pub const OrthonormalBasis = struct {
 pub const Interval = struct {
     min: f32,
     max: f32,
-    const Self = @This();
 
-    pub fn init(min: f32, max: f32) Self {
-        return Self{
+    pub fn init(min: f32, max: f32) Interval {
+        return .{
             .min = min,
             .max = max,
         };
     }
 
-    pub fn empty() Self {
-        return Self{
+    pub fn empty() Interval {
+        return .{
             .min = std.math.inf(f32),
             .max = -std.math.inf(f32),
         };
     }
 
-    pub fn universe() Self {
-        return Self{
+    pub fn universe() Interval {
+        return .{
             .min = -std.math.inf(f32),
             .max = std.math.inf(f32),
         };
@@ -174,34 +178,34 @@ pub const Interval = struct {
         return .{ .min = self.min + displacement, .max = self.max + displacement };
     }
 
-    pub fn size(self: Self) f32 {
+    pub fn size(self: Interval) f32 {
         return self.max - self.min;
     }
 
-    pub fn contains(self: Self, x: f32) bool {
+    pub fn contains(self: Interval, x: f32) bool {
         return self.min <= x and x <= self.max;
     }
 
-    pub fn surrounds(self: Self, x: f32) bool {
+    pub fn surrounds(self: Interval, x: f32) bool {
         return self.min < x and x < self.max;
     }
 
-    pub fn clamp(self: Self, x: f32) f32 {
+    pub fn clamp(self: Interval, x: f32) f32 {
         if (x < self.min) return self.min;
         if (x > self.max) return self.max;
         return x;
     }
 
-    pub fn expand(self: Self, delta: f32) Self {
+    pub fn expand(self: Interval, delta: f32) Interval {
         const padding = delta / 2.0;
-        return Self{
+        return .{
             .min = self.min - padding,
             .max = self.max + padding,
         };
     }
 
-    pub fn merge(a: Self, b: Self) Self {
-        return Self{
+    pub fn merge(a: Interval, b: Interval) Interval {
+        return .{
             .min = @min(a.min, b.min),
             .max = @max(a.max, b.max),
         };

@@ -73,9 +73,8 @@ pub const Material = union(enum) {
 
 pub const Lambertian = struct {
     tex_id: usize,
-    const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
+    pub fn scatter(self: Lambertian, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
         _ = r_in;
         const texture = textures[self.tex_id];
 
@@ -96,9 +95,8 @@ pub const Lambertian = struct {
 pub const Metal = struct {
     albedo: @Vector(3, f32),
     fuzz: f32,
-    const Self = @This();
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
+    pub fn scatter(self: Metal, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
         var reflected = math.reflect(r_in.direction, rec.normal);
         reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
         srec.*.attenuation = self.albedo;
@@ -113,19 +111,18 @@ pub const Dielectric = struct {
     refraction_index: f32,
     r0: f32,
     one_minus_r0: f32,
-    const Self = @This();
 
-    pub fn init(refraction_index: f32) Self {
+    pub fn init(refraction_index: f32) Dielectric {
         const r0_temp = (1.0 - refraction_index) / (1.0 + refraction_index);
         const r0_val = r0_temp * r0_temp;
-        return Self{
+        return .{
             .refraction_index = refraction_index,
             .r0 = r0_val,
             .one_minus_r0 = 1.0 - r0_val,
         };
     }
 
-    pub fn scatter(self: Self, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
+    pub fn scatter(self: Dielectric, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
         srec.*.attenuation = @Vector(3, f32){ 1.0, 1.0, 1.0 };
         srec.*.pdf_value = null;
         srec.*.skip_pdf = true;
@@ -148,7 +145,7 @@ pub const Dielectric = struct {
         return true;
     }
 
-    fn reflectance(self: Self, cosine: f32) f32 {
+    fn reflectance(self: Dielectric, cosine: f32) f32 {
         const one_minus = 1 - cosine;
         const sq = one_minus * one_minus;
         return self.r0 + self.one_minus_r0 * (sq * sq * one_minus);

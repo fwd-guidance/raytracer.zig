@@ -29,9 +29,8 @@ pub const HitRecord = struct {
     mat_id: usize,
     normal: @Vector(3, f32),
     front_face: bool,
-    const Self = @This();
 
-    pub fn set_face_normal(self: *Self, r: *const Ray, outward_normal: *const @Vector(3, f32)) void {
+    pub fn set_face_normal(self: *HitRecord, r: *const Ray, outward_normal: *const @Vector(3, f32)) void {
         // Sets the hit record normal Vector
         // NOTE: the parameter outward_normal is assumed to have unit length
 
@@ -52,10 +51,8 @@ pub const HittableList = struct {
     bbox: AABB,
     allocator: std.mem.Allocator,
 
-    const Self = @This();
-
-    pub fn init(allocator: std.mem.Allocator) Self {
-        return Self{
+    pub fn init(allocator: std.mem.Allocator) HittableList {
+        return .{
             .spheres = .empty,
             .quads = .empty,
             .boxes = .empty,
@@ -69,7 +66,7 @@ pub const HittableList = struct {
         };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *HittableList) void {
         // Free BVH if it exists
         if (self.bvh_root != null) {
             self.bvh_root.?.deinit(self.allocator);
@@ -95,22 +92,22 @@ pub const HittableList = struct {
         self.images.deinit(self.allocator);
     }
 
-    pub fn add_image(self: *Self, img: RTWImage) !usize {
+    pub fn add_image(self: *HittableList, img: RTWImage) !usize {
         try self.images.append(self.allocator, img);
         return self.images.items.len - 1;
     }
 
-    pub fn add_texture(self: *Self, tex: Texture) !usize {
+    pub fn add_texture(self: *HittableList, tex: Texture) !usize {
         try self.textures.append(self.allocator, tex);
         return self.textures.items.len - 1;
     }
 
-    pub fn add_material(self: *Self, mat: Material) !usize {
+    pub fn add_material(self: *HittableList, mat: Material) !usize {
         try self.materials.append(self.allocator, mat);
         return self.materials.items.len - 1;
     }
 
-    pub fn add(self: *Self, obj: Primitive) anyerror!*Self {
+    pub fn add(self: *HittableList, obj: Primitive) anyerror!*HittableList {
         switch (obj) {
             .Sphere => |s| {
                 try self.spheres.append(self.allocator, s);
@@ -137,11 +134,11 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: Self, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn hit(self: HittableList, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
         return self.bvh_root.?.hit(r, ray_t, rec);
     }
 
-    pub fn bounding_box(self: Self) AABB {
+    pub fn bounding_box(self: HittableList) AABB {
         if (self.objects.len == 0) {
             return AABB.empty();
         }
@@ -160,7 +157,7 @@ pub const HittableList = struct {
         return output_box;
     }
 
-    pub fn build_bvh(self: *Self) !void {
+    pub fn build_bvh(self: *HittableList) !void {
         if (self.bvh_root != null) {
             self.bvh_root.?.deinit(self.allocator);
             self.bvh_root = null;
