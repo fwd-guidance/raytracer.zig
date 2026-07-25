@@ -35,7 +35,11 @@ pub const AABB = struct {
     }
 
     pub fn add(self: AABB, offset: @Vector(3, f32)) AABB {
-        return .{ .x = self.x.add(offset[0]), .y = self.y.add(offset[1]), .z = self.z.add(offset[2]) };
+        return .{
+            .x = self.x.add(offset[0]),
+            .y = self.y.add(offset[1]),
+            .z = self.z.add(offset[2]),
+        };
     }
 
     pub fn longest_axis(self: AABB) u8 {
@@ -72,7 +76,7 @@ pub const AABB = struct {
         };
     }
 
-    pub fn hit(self: AABB, r: Ray, ray_t: Interval) bool {
+    pub fn hit(self: *const AABB, r: *const Ray, ray_t: Interval) bool {
         // For each dimension, compute the times the ray enters and exits the box
         var t_min = ray_t.min;
         var t_max = ray_t.max;
@@ -111,7 +115,7 @@ pub const AABB = struct {
         return true; // Ray intersects box
     }
 
-    pub fn hit_distance(self: AABB, r: Ray, ray_t: Interval) ?f32 {
+    pub fn hit_distance(self: *const AABB, r: *const Ray, ray_t: Interval) ?f32 {
         const box_min = @Vector(3, f32){ self.x.min, self.y.min, self.z.min };
         const box_max = @Vector(3, f32){ self.x.max, self.y.max, self.z.max };
 
@@ -141,6 +145,12 @@ pub const BVHNode = struct {
     right: *Hittable,
     bbox: AABB,
 
+    // Cached child bounding boxes: traversal reads these directly instead of
+    // dispatching bounding_box() through the Hittable/Primitive unions twice
+    // per node visit (which used to copy ~136 bytes per call).
+    left_bbox: AABB,
+    right_bbox: AABB,
+
     // Construct a bounding volume hierarchy node from a range of hittables
     pub fn init_from_list(allocator: std.mem.Allocator, objects: []Primitive) !*BVHNode {
         return try init_from_span(allocator, objects, 0, objects.len);
@@ -151,7 +161,7 @@ pub const BVHNode = struct {
 
         var span_bbox = AABB.empty();
         for (start..end) |i| {
-            span_bbox = AABB.merge(span_bbox, objects[i].bounding_box());
+            span_bbox = AABB.merge(span_bbox, objects[i].bounding_box().*);
         }
         const axis = span_bbox.longest_axis();
 
@@ -177,9 +187,13 @@ pub const BVHNode = struct {
             node.right = try Hittable.create_from_bvh(allocator, try init_from_span(allocator, objects, mid, end));
         }
 
-        const box_left = node.left.bounding_box();
-        const box_right = node.right.bounding_box();
-        node.bbox = AABB.merge(box_left, box_right);
+        node.left_bbox = node.left.bounding_box().*;
+        node.right_bbox = node.right.bounding_box().*;
+        node.bbox = AABB.merge(node.left_bbox, node.right_bbox);
+
+        //const box_left = node.left.bounding_box();
+        //const box_right = node.right.bounding_box();
+        //node.bbox = AABB.merge(box_left, box_right);
         return node;
     }
 
@@ -191,27 +205,18 @@ pub const BVHNode = struct {
         allocator.destroy(self);
     }
 
-    pub fn hit(self: BVHNode, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
-        // OPTIONAL: Check self.bbox first.
-        // (Can be removed if you trust the parent logic, but safe to keep for root).
-        //if (self.bbox.hit_distance(r, ray_t) == null) return false;
+    pub fn hit(self: *const BVHNode, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+        // Intersect both child boxes (stored inline in this node) to get distances.
+        const dist_left = self.left_bbox.hit_distance(r, ray_t);
+        const dist_right = self.right_bbox.hit_distance(r, ray_t);
 
-        // 1. Fetch children's bounding boxes
-        const box_left = self.left.bounding_box();
-        const box_right = self.right.bounding_box();
-
-        // 2. Intersect both boxes to get distances
-        const dist_left = box_left.hit_distance(r, ray_t);
-        const dist_right = box_right.hit_distance(r, ray_t);
-
-        // 3. Logic: Traverse the closer child first
+        // Traverse the closer child first so a hit there can prune the far child.
         if (dist_left != null and dist_right != null) {
             if (dist_left.? < dist_right.?) {
                 // Left is closer: Visit Left -> Right
                 const hit_l = self.left.hit(r, ray_t, rec);
 
                 // If left hit, it shrunk the search window (rec.t).
-                // We use this tighter window for the right child.
                 const t_max = if (hit_l) rec.t else ray_t.max;
                 const right_interval = Interval.init(ray_t.min, t_max);
 
@@ -239,8 +244,57 @@ pub const BVHNode = struct {
         }
     }
 
-    pub fn bounding_box(self: BVHNode) AABB {
-        return self.bbox;
+    //pub fn hit(self: *const BVHNode, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    //    if (self.left == self.right) return self.left.hit(r, ray_t, rec);
+    //    // OPTIONAL: Check self.bbox first.
+    //    // (Can be removed if you trust the parent logic, but safe to keep for root).
+    //    //if (self.bbox.hit_distance(r, ray_t) == null) return false;
+
+    //    // 1. Fetch children's bounding boxes
+    //    const box_left = self.left.bounding_box();
+    //    const box_right = self.right.bounding_box();
+
+    //    // 2. Intersect both boxes to get distances
+    //    const dist_left = box_left.hit_distance(r, ray_t);
+    //    const dist_right = box_right.hit_distance(r, ray_t);
+
+    //    // 3. Logic: Traverse the closer child first
+    //    if (dist_left != null and dist_right != null) {
+    //        if (dist_left.? < dist_right.?) {
+    //            // Left is closer: Visit Left -> Right
+    //            const hit_l = self.left.hit(r, ray_t, rec);
+
+    //            // If left hit, it shrunk the search window (rec.t).
+    //            // We use this tighter window for the right child.
+    //            const t_max = if (hit_l) rec.t else ray_t.max;
+    //            const right_interval = Interval.init(ray_t.min, t_max);
+
+    //            const hit_r = self.right.hit(r, right_interval, rec);
+    //            return hit_l or hit_r;
+    //        } else {
+    //            // Right is closer: Visit Right -> Left
+    //            const hit_r = self.right.hit(r, ray_t, rec);
+
+    //            const t_max = if (hit_r) rec.t else ray_t.max;
+    //            const left_interval = Interval.init(ray_t.min, t_max);
+
+    //            const hit_l = self.left.hit(r, left_interval, rec);
+    //            return hit_r or hit_l;
+    //        }
+    //    } else if (dist_left != null) {
+    //        // Only left box hit
+    //        return self.left.hit(r, ray_t, rec);
+    //    } else if (dist_right != null) {
+    //        // Only right box hit
+    //        return self.right.hit(r, ray_t, rec);
+    //    } else {
+    //        // Neither box hit
+    //        return false;
+    //    }
+    //}
+
+    pub fn bounding_box(self: *const BVHNode) *const AABB {
+        return &self.bbox;
     }
 };
 
@@ -292,16 +346,16 @@ pub const Hittable = union(HittableType) {
     primitive: Primitive,
     bvh_node: *BVHNode,
 
-    pub fn hit(self: Hittable, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
-        return switch (self) {
-            .primitive => |p| p.hit(&r, ray_t, rec),
+    pub fn hit(self: *const Hittable, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+        return switch (self.*) {
+            .primitive => |*p| p.hit(r, ray_t, rec),
             .bvh_node => |b| b.hit(r, ray_t, rec),
         };
     }
 
-    pub fn bounding_box(self: Hittable) AABB {
-        return switch (self) {
-            .primitive => |p| p.bounding_box(),
+    pub fn bounding_box(self: *const Hittable) *const AABB {
+        return switch (self.*) {
+            .primitive => |*p| p.bounding_box(),
             .bvh_node => |b| b.bounding_box(),
         };
     }

@@ -57,21 +57,40 @@ pub const SpherePDF = struct {
 };
 
 pub const CosinePDF = struct {
-    uvw: math.OrthonormalBasis,
+    w: @Vector(3, f32),
 
     pub fn init(w: @Vector(3, f32)) CosinePDF {
-        return .{ .uvw = math.OrthonormalBasis.init(w) };
+        return .{ .w = math.unit(w) };
     }
 
     pub fn value(self: CosinePDF, direction: @Vector(3, f32)) f32 {
-        const cosine_theta = math.dot(math.unit(direction), self.uvw.w);
+        const cosine_theta = math.dot(math.unit(direction), self.w);
         return @max(0, cosine_theta / std.math.pi);
     }
 
     pub fn generate(self: CosinePDF) @Vector(3, f32) {
-        return self.uvw.transform(math.random_cosine_direction());
+        // Only rebuild u/v here, where they're actually needed.
+        const onb = math.OrthonormalBasis.init(self.w);
+        return onb.transform(math.random_cosine_direction());
     }
 };
+
+//pub const CosinePDF = struct {
+//    uvw: math.OrthonormalBasis,
+//
+//    pub fn init(w: @Vector(3, f32)) CosinePDF {
+//        return .{ .uvw = math.OrthonormalBasis.init(w) };
+//    }
+//
+//    pub fn value(self: CosinePDF, direction: @Vector(3, f32)) f32 {
+//        const cosine_theta = math.dot(math.unit(direction), self.uvw.w);
+//        return @max(0, cosine_theta / std.math.pi);
+//    }
+//
+//    pub fn generate(self: CosinePDF) @Vector(3, f32) {
+//        return self.uvw.transform(math.random_cosine_direction());
+//    }
+//};
 
 pub const HittablePDF = struct {
     objects: *const HittableList,

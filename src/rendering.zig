@@ -248,7 +248,7 @@ pub const Camera = struct {
         if (depth <= 0) return math.init(0, 0, 0);
 
         var rec: HitRecord = undefined;
-        if (!world.hit(r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
+        if (!world.hit(&r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
             return camera.background;
         }
 

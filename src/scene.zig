@@ -111,19 +111,19 @@ pub const HittableList = struct {
         switch (obj) {
             .Sphere => |s| {
                 try self.spheres.append(self.allocator, s);
-                self.bbox = AABB.merge(self.bbox, s.bounding_box());
+                self.bbox = AABB.merge(self.bbox, s.bounding_box().*);
             },
             .Quad => |q| {
                 try self.quads.append(self.allocator, q);
-                self.bbox = AABB.merge(self.bbox, q.bounding_box());
+                self.bbox = AABB.merge(self.bbox, q.bounding_box().*);
             },
             .Box => |b| {
                 try self.boxes.append(self.allocator, b);
-                self.bbox = AABB.merge(self.bbox, b.bounding_box());
+                self.bbox = AABB.merge(self.bbox, b.bounding_box().*);
             },
             .ConstantMedium => |cm| {
                 try self.constant_mediums.append(self.allocator, cm);
-                self.bbox = AABB.merge(self.bbox, cm.bounding_box());
+                self.bbox = AABB.merge(self.bbox, cm.bounding_box().*);
             },
         }
         // Clear BVH since we've modified the object list
@@ -134,7 +134,7 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: HittableList, r: Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn hit(self: *const HittableList, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         return self.bvh_root.?.hit(r, ray_t, rec);
     }
 

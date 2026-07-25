@@ -63,8 +63,10 @@ pub fn near_zero(self: @Vector(3, f32)) bool {
 }
 
 pub fn unit(v: @Vector(3, f32)) @Vector(3, f32) {
-    const len = magnitude(v);
-    return v / vec3s(len);
+    //const len = magnitude(v);
+    //return v / vec3s(len);
+    const inv_len = 1.0 / @sqrt(@reduce(.Add, v * v));
+    return v * vec3s(inv_len);
 }
 
 pub fn random_in_unit_disk() @Vector(3, f32) {
@@ -82,7 +84,13 @@ pub fn random_in_unit_sphere() @Vector(3, f32) {
 }
 
 pub fn random_unit_vector() @Vector(3, f32) {
-    return unit(random_in_unit_sphere());
+    //return unit(random_in_unit_sphere());
+    // Direct uniform sampling on the unit sphere (no rejection loop):
+    // z ~ U[-1,1], phi ~ U[0, 2*pi) is exactly uniform on S^2.
+    const z = utils.random_double_range(-1, 1);
+    const phi = 2.0 * std.math.pi * utils.random_double();
+    const r = @sqrt(@max(0.0, 1.0 - z * z));
+    return .{ r * @cos(phi), r * @sin(phi), z };
 }
 
 pub fn random_cosine_direction() @Vector(3, f32) {
@@ -123,7 +131,12 @@ pub fn dot(u: @Vector(3, f32), v: @Vector(3, f32)) f32 {
 }
 
 pub fn cross(u: @Vector(3, f32), v: @Vector(3, f32)) @Vector(3, f32) {
-    return init(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
+    //return init(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
+    const u_yzx = @shuffle(f32, u, undefined, @Vector(3, i32){ 1, 2, 0 });
+    const u_zxy = @shuffle(f32, u, undefined, @Vector(3, i32){ 2, 0, 1 });
+    const v_yzx = @shuffle(f32, v, undefined, @Vector(3, i32){ 1, 2, 0 });
+    const v_zxy = @shuffle(f32, v, undefined, @Vector(3, i32){ 2, 0, 1 });
+    return u_yzx * v_zxy - u_zxy * v_yzx;
 }
 
 pub const OrthonormalBasis = struct {
@@ -223,14 +236,18 @@ pub const Ray = struct {
     }
 
     inline fn compute_inv_direction(direction: @Vector(3, f32)) @Vector(3, f32) {
-        return @Vector(3, f32){
-            if (direction[0] != 0.0) 1.0 / direction[0] else std.math.inf(f32),
-            if (direction[1] != 0.0) 1.0 / direction[1] else std.math.inf(f32),
-            if (direction[2] != 0.0) 1.0 / direction[2] else std.math.inf(f32),
-        };
+        // Branchless: IEEE division gives +/-inf for zero components, which is
+        // exactly what the slab test wants (it swaps on invD < 0).
+        return vec3s(1.0) / direction;
+        //return @Vector(3, f32){
+        //    if (direction[0] != 0.0) 1.0 / direction[0] else std.math.inf(f32),
+        //    if (direction[1] != 0.0) 1.0 / direction[1] else std.math.inf(f32),
+        //    if (direction[2] != 0.0) 1.0 / direction[2] else std.math.inf(f32),
+        //};
     }
 
-    pub fn position(self: Ray, t: f32) @Vector(3, f32) {
-        return self.origin + scale(self.direction, t);
+    pub fn position(self: *const Ray, t: f32) @Vector(3, f32) {
+        //return self.origin + scale(self.direction, t);
+        return self.origin + self.direction * vec3s(t);
     }
 };
