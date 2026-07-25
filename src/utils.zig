@@ -54,16 +54,16 @@ fn ensure_seeded() void {
 /// the std.Random interface overhead.  The conversion mirrors what the
 /// interface does internally anyway: take the top 24 bits (f32 mantissa width)
 /// and divide by 2^24.
-pub fn random_double() f32 {
+pub inline fn random_double() f32 {
     ensure_seeded();
     return @as(f32, @floatFromInt(ThreadLocal.prng.next() >> 40)) * (1.0 / 16777216.0);
 }
 
-pub fn random_double_range(min: f32, max: f32) f32 {
+pub inline fn random_double_range(min: f32, max: f32) f32 {
     return min + (max - min) * random_double();
 }
 
-pub fn random_int(min: f32, max: f32) i64 {
+pub inline fn random_int(min: f32, max: f32) i64 {
     return @intFromFloat(random_double_range(min, max + 1));
 }
 
@@ -97,7 +97,7 @@ pub const Perlin = struct {
         };
     }
 
-    pub fn noise(self: Perlin, p: @Vector(3, f32)) f32 {
+    pub fn noise(self: *const Perlin, p: @Vector(3, f32)) f32 {
         // Calculate floor and fractional parts in one go
         const floored = @floor(p);
         const frac = p - floored;
@@ -146,7 +146,7 @@ pub const Perlin = struct {
         return c0 + w * (c1 - c0);
     }
 
-    pub fn turb(self: Perlin, p: @Vector(3, f32), depth: u32) f32 {
+    pub fn turb(self: *const Perlin, p: @Vector(3, f32), depth: u32) f32 {
         var accum: f32 = 0.0;
         var temp_p = p;
         var weight: f32 = 1.0;
@@ -293,15 +293,15 @@ pub const RTWImage = struct {
         return true;
     }
 
-    pub fn width(self: RTWImage) i32 {
+    pub fn width(self: *const RTWImage) i32 {
         return if (self.fdata == null) 0 else self.image_width;
     }
 
-    pub fn height(self: RTWImage) i32 {
+    pub fn height(self: *const RTWImage) i32 {
         return if (self.fdata == null) 0 else self.image_height;
     }
 
-    pub fn pixel_data(self: RTWImage, x: i32, y: i32) [*]const u8 {
+    pub fn pixel_data(self: *const RTWImage, x: i32, y: i32) [*]const u8 {
         // Return the address of the three RGB bytes of the pixel at x,y.
         // If there is no image data, returns red.
         if (self.bdata == null) return &red;

@@ -111,19 +111,31 @@ pub const HittableList = struct {
         switch (obj) {
             .Sphere => |s| {
                 try self.spheres.append(self.allocator, s);
-                self.bbox = AABB.merge(self.bbox, s.bounding_box().*);
+                const stored = &self.spheres.items[self.spheres.items.len - 1];
+                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+
+                //self.bbox = AABB.merge(self.bbox, s.bounding_box().*);
             },
             .Quad => |q| {
                 try self.quads.append(self.allocator, q);
-                self.bbox = AABB.merge(self.bbox, q.bounding_box().*);
+                const stored = &self.quads.items[self.quads.items.len - 1];
+                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+
+                //self.bbox = AABB.merge(self.bbox, q.bounding_box().*);
             },
             .Box => |b| {
                 try self.boxes.append(self.allocator, b);
-                self.bbox = AABB.merge(self.bbox, b.bounding_box().*);
+                const stored = &self.boxes.items[self.boxes.items.len - 1];
+                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+
+                //self.bbox = AABB.merge(self.bbox, b.bounding_box().*);
             },
             .ConstantMedium => |cm| {
                 try self.constant_mediums.append(self.allocator, cm);
-                self.bbox = AABB.merge(self.bbox, cm.bounding_box().*);
+                const stored = &self.constant_mediums.items[self.constant_mediums.items.len - 1];
+                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+
+                //self.bbox = AABB.merge(self.bbox, cm.bounding_box().*);
             },
         }
         // Clear BVH since we've modified the object list
@@ -138,23 +150,32 @@ pub const HittableList = struct {
         return self.bvh_root.?.hit(r, ray_t, rec);
     }
 
-    pub fn bounding_box(self: HittableList) AABB {
-        if (self.objects.len == 0) {
-            return AABB.empty();
+    pub fn bounding_box(self: *HittableList) *const AABB {
+        // If BVH exists, its box covers the whole scene.
+        if (self.bvh_root) |root| {
+            return root.bounding_box();
         }
+        // self.bbox is maintained incrementally by add().
+        // (The previous implementation referenced a non-existent `self.objects`
+        // field and only compiled because lazy analysis never instantiated it.)
+        return &self.bbox;
 
-        // If BVH exists, use its bounding box
-        if (self.bvh_root != null) {
-            return self.bvh_root.?.bounding_box();
-        }
+        //if (self.objects.len == 0) {
+        //    return AABB.empty();
+        //}
 
-        var output_box = AABB.empty();
+        //// If BVH exists, use its bounding box
+        //if (self.bvh_root != null) {
+        //    return self.bvh_root.?.bounding_box();
+        //}
 
-        for (0..self.objects.len) |i| {
-            const sphere = self.objects.get(i);
-            output_box = AABB.merge(output_box, sphere.bounding_box());
-        }
-        return output_box;
+        //var output_box = AABB.empty();
+
+        //for (0..self.objects.len) |i| {
+        //    const sphere = self.objects.get(i);
+        //    output_box = AABB.merge(output_box, sphere.bounding_box());
+        //}
+        //return output_box;
     }
 
     pub fn build_bvh(self: *HittableList) !void {
@@ -197,22 +218,25 @@ pub const HittableList = struct {
     }
 
     pub fn pdf_value(self: *const HittableList, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
-        const weight = 1.0 / math.tof32(self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len);
+        const count = self.spheres.items.len + self.quads.items.len + self.boxes.items.len + self.constant_mediums.items.len;
+        if (count == 0) return 0;
+
+        const weight = 1.0 / math.tof32(count);
         var sum: f32 = 0.0;
 
-        for (self.spheres.items) |s| {
+        for (self.spheres.items) |*s| {
             sum += weight * s.pdf_value(origin, direction);
         }
 
-        for (self.quads.items) |q| {
+        for (self.quads.items) |*q| {
             sum += weight * q.pdf_value(origin, direction);
         }
 
-        for (self.boxes.items) |b| {
+        for (self.boxes.items) |*b| {
             sum += weight * b.pdf_value(origin, direction);
         }
 
-        for (self.constant_mediums.items) |cm| {
+        for (self.constant_mediums.items) |*cm| {
             sum += weight * cm.pdf_value(origin, direction);
         }
 

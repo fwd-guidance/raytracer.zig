@@ -29,10 +29,10 @@ pub const Texture = union(enum) {
 
     pub fn value(self: *const Texture, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         return switch (self.*) {
-            .SolidColor => |sc| sc.value(u, v, p),
-            .Checker => |c| c.value(u, v, p),
-            .Image => |i| i.value(u, v, p),
-            .Noise => |perlin| perlin.value(u, v, p),
+            .SolidColor => |*sc| sc.value(u, v, p),
+            .Checker => |*c| c.value(u, v, p),
+            .Image => |*i| i.value(u, v, p),
+            .Noise => |*perlin| perlin.value(u, v, p),
         };
     }
 };
@@ -40,7 +40,7 @@ pub const Texture = union(enum) {
 pub const SolidColor = struct {
     albedo: @Vector(3, f32),
 
-    pub fn value(self: SolidColor, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn value(self: *const SolidColor, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         _ = u;
         _ = v;
         _ = p;
@@ -53,7 +53,7 @@ pub const Checker = struct {
     even: *const Texture,
     odd: *const Texture,
 
-    pub fn value(self: Checker, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn value(self: *const Checker, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         const x: i32 = @intFromFloat(@floor(self.inv_scale * p[0]));
         const y: i32 = @intFromFloat(@floor(self.inv_scale * p[1]));
         const z: i32 = @intFromFloat(@floor(self.inv_scale * p[2]));
@@ -67,7 +67,7 @@ pub const Checker = struct {
 pub const Image = struct {
     image: *const RTWImage,
 
-    pub fn value(self: Image, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn value(self: *const Image, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         _ = p;
 
         // If we have no texture data, return solid red as a debugging aid
@@ -110,7 +110,7 @@ pub const Noise = struct {
         };
     }
 
-    pub fn value(self: Noise, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn value(self: *const Noise, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         _ = u;
         _ = v;
 
