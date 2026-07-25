@@ -548,9 +548,7 @@ pub const Box = struct {
             -self.sin_theta * local_normal[0] + self.cos_theta * local_normal[2],
         };
 
-        // Ensure proper face orientation (handled by Scene loop usually, but good to be safe)
-        // We already set local_normal to oppose the ray, so it should be outward.
-        // TODO: rec.front_face = math.dot(r.direction, rec.normal) < 0;
+        rec.front_face = math.dot(r.direction, rec.normal) < 0;
         // 7. Calculate UVs (Optional)
         // Map the hit point on the face to 0..1
         // const local_hit = local_origin + local_dir * @as(@Vector(3, f32), @splat(t_min));

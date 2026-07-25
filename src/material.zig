@@ -18,6 +18,21 @@ pub const ScatterRecord = struct {
     skip_pdf_ray: Ray,
 };
 
+/// Compute UVs for a hit, deferring the expensive acos/atan2 for spheres
+/// (which write the UV_DEFERRED sentinel) unless the texture actually
+/// consumes UV coordinates (image textures). Solid/checker/noise textures
+/// never look at u/v, so for them the trig is skipped entirely.
+inline fn sampleUV(texture: *const Texture, rec: *const HitRecord) [2]f32 {
+    if (rec.u >= 0.0) return .{ rec.u, rec.v };
+    if (texture.* != .Image) return .{ 0.0, 0.0 };
+
+    // Sphere UVs, recovered from the surface normal (unit outward normal).
+    const outward = if (rec.front_face) rec.normal else -rec.normal;
+    const theta = std.math.acos(-outward[1]);
+    const phi = std.math.atan2(-outward[2], outward[0]) + std.math.pi;
+    return .{ phi / (2.0 * std.math.pi), theta / std.math.pi };
+}
+
 pub const Material = union(enum) {
     Lambertian: Lambertian,
     Metal: Metal,
@@ -45,27 +60,28 @@ pub const Material = union(enum) {
         return Material{ .Isotropic = Isotropic{ .tex_id = tex_id } };
     }
 
-    pub fn scatter(self: Material, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
-        return switch (self) {
-            .Lambertian => |l| l.scatter(r_in, rec, srec, textures),
-            .Metal => |m| m.scatter(r_in, rec, srec),
-            .Dielectric => |d| d.scatter(r_in, rec, srec),
+    pub fn scatter(self: *const Material, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
+        return switch (self.*) {
+            .Lambertian => |*l| l.scatter(r_in, rec, srec, textures),
+            .Metal => |*m| m.scatter(r_in, rec, srec),
+            .Dielectric => |*d| d.scatter(r_in, rec, srec),
             .DiffuseLight => false,
-            .Isotropic => |i| i.scatter(r_in, rec, srec, textures),
+            .Isotropic => |*i| i.scatter(r_in, rec, srec, textures),
         };
     }
 
-    pub fn emitted(self: Material, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
-        return switch (self) {
-            .DiffuseLight => |d| d.emitted(r_in, rec, u, v, p, textures),
+    pub fn emitted(self: *const Material, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+        return switch (self.*) {
+            // TODO:
+            .DiffuseLight => |*d| d.emitted(r_in, rec, u, v, p, textures),
             else => @Vector(3, f32){ 0, 0, 0 },
         };
     }
 
-    pub fn scattering_pdf(self: Material, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
-        return switch (self) {
-            .Lambertian => |l| l.scattering_pdf(r_in, rec, scattered),
-            .Isotropic => |i| i.scattering_pdf(r_in, rec, scattered),
+    pub fn scattering_pdf(self: *const Material, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
+        return switch (self.*) {
+            .Lambertian => |*l| l.scattering_pdf(r_in, rec, scattered),
+            .Isotropic => |*i| i.scattering_pdf(r_in, rec, scattered),
             else => 0.0,
         };
     }
@@ -74,17 +90,21 @@ pub const Material = union(enum) {
 pub const Lambertian = struct {
     tex_id: usize,
 
-    pub fn scatter(self: Lambertian, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
+    pub fn scatter(self: *const Lambertian, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
         _ = r_in;
-        const texture = textures[self.tex_id];
 
-        srec.*.attenuation = texture.value(rec.u, rec.v, rec.p);
-        srec.*.pdf_value = pdf.PDF{ .cosine = pdf.CosinePDF.init(rec.normal) };
-        srec.*.skip_pdf = false;
+        // IMPORTANT: take a pointer. Copying the Texture union by value copies
+        // the largest variant (Noise contains a ~4KB Perlin struct) per bounce.
+        const texture = &textures[self.tex_id];
+
+        const uv = sampleUV(texture, rec);
+        srec.attenuation = texture.value(uv[0], uv[1], rec.p);
+        srec.pdf_value = pdf.PDF{ .cosine = pdf.CosinePDF.init(rec.normal) };
+        srec.skip_pdf = false;
         return true;
     }
 
-    pub fn scattering_pdf(self: Lambertian, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
+    pub fn scattering_pdf(self: *const Lambertian, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
         _ = r_in;
         _ = self;
         const cos_theta = math.dot(rec.normal, math.unit(scattered.direction));
@@ -96,7 +116,7 @@ pub const Metal = struct {
     albedo: @Vector(3, f32),
     fuzz: f32,
 
-    pub fn scatter(self: Metal, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
+    pub fn scatter(self: *const Metal, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
         var reflected = math.reflect(r_in.direction, rec.normal);
         reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
         srec.*.attenuation = self.albedo;
@@ -122,7 +142,7 @@ pub const Dielectric = struct {
         };
     }
 
-    pub fn scatter(self: Dielectric, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
+    pub fn scatter(self: *const Dielectric, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
         srec.*.attenuation = @Vector(3, f32){ 1.0, 1.0, 1.0 };
         srec.*.pdf_value = null;
         srec.*.skip_pdf = true;
@@ -145,7 +165,7 @@ pub const Dielectric = struct {
         return true;
     }
 
-    fn reflectance(self: Dielectric, cosine: f32) f32 {
+    fn reflectance(self: *const Dielectric, cosine: f32) f32 {
         const one_minus = 1 - cosine;
         const sq = one_minus * one_minus;
         return self.r0 + self.one_minus_r0 * (sq * sq * one_minus);
@@ -155,26 +175,33 @@ pub const Dielectric = struct {
 pub const DiffuseLight = struct {
     tex_id: usize,
 
-    pub fn emitted(self: DiffuseLight, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+    pub fn emitted(self: *const DiffuseLight, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+        _ = u;
+        _ = v;
+        _ = p;
         _ = r_in;
-        if (!rec.*.front_face) return math.init(0, 0, 0);
-        return textures[self.tex_id].value(u, v, p);
+
+        if (!rec.front_face) return math.init(0, 0, 0);
+        const texture = &textures[self.tex_id];
+        const uv = sampleUV(texture, rec);
+        return texture.value(uv[0], uv[1], rec.p);
     }
 };
 
 pub const Isotropic = struct {
     tex_id: usize,
 
-    pub fn scatter(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
+    pub fn scatter(self: *const Isotropic, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord, textures: []const Texture) bool {
         _ = r_in;
-        const texture = textures[self.tex_id];
-        srec.*.attenuation = texture.value(rec.*.u, rec.*.v, rec.*.p);
-        srec.*.pdf_value = pdf.PDF{ .sphere = pdf.SpherePDF.init() };
-        srec.*.skip_pdf = false;
+        const texture = &textures[self.tex_id];
+        const uv = sampleUV(texture, rec);
+        srec.attenuation = texture.value(uv[0], uv[1], rec.p);
+        srec.pdf_value = pdf.PDF{ .sphere = pdf.SpherePDF.init() };
+        srec.skip_pdf = false;
         return true;
     }
 
-    pub fn scattering_pdf(self: Isotropic, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
+    pub fn scattering_pdf(self: *const Isotropic, r_in: *const Ray, rec: *const HitRecord, scattered: *const Ray) f32 {
         _ = self;
         _ = r_in;
         _ = rec;
