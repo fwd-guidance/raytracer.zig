@@ -16,12 +16,16 @@ const random_double = utils.random_double;
 const material = @import("material.zig").Material;
 const ScatterRecord = @import("material.zig").ScatterRecord;
 
+/// Paths longer than this many bounces become eligible for Russian-roulette
+/// termination. Set very high (e.g. 1_000_000) to disable.
+const rr_start_bounces: u32 = 1_000_000;
+
 pub const Camera = struct {
-    samples_per_pixel: u32, //f32,
-    max_depth: u32, //f32,
+    samples_per_pixel: u32,
+    max_depth: u32,
     aspect_ratio: f32,
-    image_width: u32, //f32,
-    image_height: u32, //f32,
+    image_width: u32,
+    image_height: u32,
     center: @Vector(3, f32),
     pixel00_loc: @Vector(3, f32),
     pixel_delta_u: @Vector(3, f32),
@@ -241,49 +245,109 @@ pub const Camera = struct {
         return self.center + math.scale(self.defocus_disk_u, p[0]) + math.scale(self.defocus_disk_v, p[1]);
     }
 
-    /// Recursive ray colour with emissive material support.
-    /// Returns the color contribution from both emitted light and scattered rays.
-    fn ray_color(camera: *const Camera, r: Ray, depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
-        // If we've exceeded the ray bounce limit, no more light is gathered
-        if (depth <= 0) return math.init(0, 0, 0);
+    /// Iterative path tracing with emission + importance sampling.
+    ///
+    /// Equivalent to the recursive version, but expressed as throughput
+    /// accumulation so we avoid a call + Ray/HitRecord copies per bounce.
+    /// Adds (unbiased) Russian-roulette termination for deep paths; set
+    /// rr_start_bounces very high to reproduce the old output exactly.
+    fn ray_color(camera: *const Camera, r: Ray, max_depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
+        var accumulated = math.init(0, 0, 0); // emitted light gathered along the path
+        var throughput = math.init(1, 1, 1); // path weight so far
+        var ray = r;
+        var depth: u32 = max_depth;
 
         var rec: HitRecord = undefined;
-        if (!world.hit(&r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
-            return camera.background;
-        }
-
         var srec: ScatterRecord = undefined;
-        const mat = world.materials.items[rec.mat_id];
 
-        // Get emitted color from the material (black for non-emissive materials)
-        const color_from_emission = mat.emitted(&r, &rec, rec.u, rec.v, rec.p, world.textures.items);
+        while (depth > 0) {
+            if (!world.hit(&ray, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
+                // Ray escaped the scene.
+                accumulated += throughput * camera.background;
+                break;
+            }
 
-        // Try to scatter the ray
-        // Use the unified Material.scatter() method or handle each case
-        const did_scatter = mat.scatter(&r, &rec, &srec, world.textures.items);
+            const mat = &world.materials.items[rec.mat_id];
 
-        // If the material doesn't scatter, return only the emitted color
-        if (!did_scatter) {
-            return color_from_emission;
+            // Emission at this hit (black for non-emissive materials).
+            accumulated += throughput * mat.emitted(&rec, world.textures.items);
+
+            if (!mat.scatter(&ray, &rec, &srec, world.textures.items)) {
+                break; // non-scattering material: only emission contributes
+            }
+
+            if (srec.skip_pdf) {
+                throughput *= srec.attenuation;
+                ray = srec.skip_pdf_ray;
+            } else {
+                const light_pdf = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
+                const p = pdf.MixturePDF.init(&light_pdf, &srec.pdf_value.?);
+
+                const scattered = Ray.init(rec.p, p.generate(), ray.tm);
+                const pdf_value = p.value(scattered.direction);
+
+                const weight = mat.scattering_pdf(&ray, &rec, &scattered) / pdf_value;
+                throughput *= srec.attenuation * math.vec3s(weight);
+                ray = scattered;
+            }
+
+            depth -= 1;
+
+            // Russian roulette: cheap out of long, dim paths. Unbiased because
+            // survivors are boosted by 1/p_survive.
+            if (max_depth - depth >= rr_start_bounces) {
+                const p_survive = @min(0.95, @max(throughput[0], @max(throughput[1], throughput[2])));
+                if (random_double() >= p_survive) break;
+                throughput /= math.vec3s(p_survive);
+            }
         }
 
-        if (srec.skip_pdf) {
-            return srec.attenuation * ray_color(camera, srec.skip_pdf_ray, depth - 1, world, lights);
-        }
-
-        const light_pdf = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
-        const p = pdf.MixturePDF.init(&light_pdf, &srec.pdf_value.?);
-
-        var scattered = Ray.init(rec.p, p.generate(), r.tm);
-        const pdf_value = p.value(scattered.direction);
-
-        const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
-
-        const color_from_scatter = (srec.attenuation * math.vec3s(scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.vec3s(pdf_value);
-
-        // Return combined emission and scatter
-        return color_from_emission + color_from_scatter;
+        return accumulated;
     }
+
+    // Recursive ray colour with emissive material support.
+    // Returns the color contribution from both emitted light and scattered rays.
+    //fn ray_color(camera: *const Camera, r: Ray, depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
+    // If we've exceeded the ray bounce limit, no more light is gathered
+    //if (depth <= 0) return math.init(0, 0, 0);
+
+    //var rec: HitRecord = undefined;
+    //if (!world.hit(&r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
+    //    return camera.background;
+    //}
+
+    //var srec: ScatterRecord = undefined;
+    //const mat = world.materials.items[rec.mat_id];
+
+    //// Get emitted color from the material (black for non-emissive materials)
+    //const color_from_emission = mat.emitted(&r, &rec, rec.u, rec.v, rec.p, world.textures.items);
+
+    //// Try to scatter the ray
+    //// Use the unified Material.scatter() method or handle each case
+    //const did_scatter = mat.scatter(&r, &rec, &srec, world.textures.items);
+
+    //// If the material doesn't scatter, return only the emitted color
+    //if (!did_scatter) {
+    //    return color_from_emission;
+    //}
+
+    //if (srec.skip_pdf) {
+    //    return srec.attenuation * ray_color(camera, srec.skip_pdf_ray, depth - 1, world, lights);
+    //}
+
+    //const light_pdf = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
+    //const p = pdf.MixturePDF.init(&light_pdf, &srec.pdf_value.?);
+
+    //var scattered = Ray.init(rec.p, p.generate(), r.tm);
+    //const pdf_value = p.value(scattered.direction);
+
+    //const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
+
+    //const color_from_scatter = (srec.attenuation * math.vec3s(scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.vec3s(pdf_value);
+
+    //// Return combined emission and scatter
+    //return color_from_emission + color_from_scatter;
+    //}
 };
 
 pub fn linear_to_gamma(linear_component: f32) f32 {

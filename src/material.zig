@@ -70,10 +70,10 @@ pub const Material = union(enum) {
         };
     }
 
-    pub fn emitted(self: *const Material, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
+    pub fn emitted(self: *const Material, rec: *const HitRecord, textures: []const Texture) @Vector(3, f32) {
         return switch (self.*) {
             // TODO:
-            .DiffuseLight => |*d| d.emitted(r_in, rec, u, v, p, textures),
+            .DiffuseLight => |*d| d.emitted(rec, textures),
             else => @Vector(3, f32){ 0, 0, 0 },
         };
     }
@@ -175,12 +175,7 @@ pub const Dielectric = struct {
 pub const DiffuseLight = struct {
     tex_id: usize,
 
-    pub fn emitted(self: *const DiffuseLight, r_in: *const Ray, rec: *const HitRecord, u: f32, v: f32, p: @Vector(3, f32), textures: []const Texture) @Vector(3, f32) {
-        _ = u;
-        _ = v;
-        _ = p;
-        _ = r_in;
-
+    pub fn emitted(self: *const DiffuseLight, rec: *const HitRecord, textures: []const Texture) @Vector(3, f32) {
         if (!rec.front_face) return math.init(0, 0, 0);
         const texture = &textures[self.tex_id];
         const uv = sampleUV(texture, rec);
