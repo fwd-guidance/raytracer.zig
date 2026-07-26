@@ -30,22 +30,27 @@ const ThreadLocal = struct {
 
 /// Lazy one-time seed per thread.  Reads a single u64 from the OS CSPRNG;
 /// Xoroshiro128.init() expands it via SplitMix64 internally.
-fn ensure_seeded() void {
+inline fn ensure_seeded() void {
     if (!ThreadLocal.seeded) {
-        var seed: u64 = undefined;
-
-        // Leaf-code entropy fetch: no Io handle is threaded through this
-        // codebase, so spin up a throwaway single-threaded Io just to pull
-        // one seed from the OS CSPRNG. Cheap since this only runs once per thread.
-        var io_threaded: std.Io.Threaded = .init_single_threaded;
-        defer io_threaded.deinit();
-        const io = io_threaded.io();
-
-        io.random(std.mem.asBytes(&seed));
-
-        ThreadLocal.prng = std.Random.Xoroshiro128.init(seed);
-        ThreadLocal.seeded = true;
+        @branchHint(.cold);
+        set_seed();
     }
+}
+
+fn set_seed() void {
+    var seed: u64 = undefined;
+
+    // Leaf-code entropy fetch: no Io handle is threaded through this
+    // codebase, so spin up a throwaway single-threaded Io just to pull
+    // one seed from the OS CSPRNG. Cheap since this only runs once per thread.
+    var io_threaded: std.Io.Threaded = .init_single_threaded;
+    defer io_threaded.deinit();
+    const io = io_threaded.io();
+
+    io.random(std.mem.asBytes(&seed));
+
+    ThreadLocal.prng = std.Random.Xoroshiro128.init(seed);
+    ThreadLocal.seeded = true;
 }
 
 /// Returns a uniformly distributed f32 in [0, 1).
@@ -230,7 +235,7 @@ pub const RTWImage = struct {
     pub fn init_from_file(allocator: std.mem.Allocator, image_filename: []const u8) !RTWImage {
         var self = RTWImage.init(allocator);
 
-        if (std.posix.getenv("RTW_IMAGES")) |imagedir| {
+        if (std.c.getenv("RTW_IMAGES")) |imagedir| {
             const full_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ imagedir, image_filename });
             defer allocator.free(full_path);
             if (self.load(full_path)) {
@@ -274,7 +279,7 @@ pub const RTWImage = struct {
 
     fn load(self: *RTWImage, filename: []const u8) bool {
         // Need null-terminated string for C
-        const filename_z = self.allocator.dupeZ(u8, filename) catch return false;
+        const filename_z = self.allocator.dupeSentinel(u8, filename, 0) catch return false;
         defer self.allocator.free(filename_z);
 
         var n: i32 = 0; // Dummy out parameter: original components per pixel

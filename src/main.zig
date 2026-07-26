@@ -31,6 +31,9 @@ pub fn draw_final_scene() !void {
     var world = HittableList.init(allocator);
     defer world.deinit();
 
+    var lights = HittableList.init(allocator);
+    defer lights.deinit();
+
     // Ground material
     const ground_tex = Texture.solid_color(@Vector(3, f32){ 0.48, 0.83, 0.53 });
     const ground_tex_id = try world.add_texture(ground_tex);
@@ -64,6 +67,7 @@ pub fn draw_final_scene() !void {
     const light = Material.diffuse_light(light_tex_id);
     const light_id = try world.add_material(light);
     _ = try world.add(.{ .Quad = Quad.init(init(123, 554, 147), init(300, 0, 0), init(0, 0, 265), light_id) });
+    _ = try lights.add(.{ .Quad = Quad.init(init(123, 554, 147), init(300, 0, 0), init(0, 0, 265), light_id) });
 
     // Moving sphere
     const center1 = init(400, 400, 200);
@@ -146,12 +150,13 @@ pub fn draw_final_scene() !void {
 
     // Build BVH
     try world.build_bvh();
+    try lights.build_bvh();
 
     // Camera setup
     var cam: Camera = undefined;
     cam.aspect_ratio = 1.0;
     cam.image_width = 800;
-    cam.samples_per_pixel = 1000;
+    cam.samples_per_pixel = 10000;
     cam.max_depth = 40;
     cam.background = @Vector(3, f32){ 0.0, 0.0, 0.0 };
 
@@ -162,7 +167,7 @@ pub fn draw_final_scene() !void {
     cam.defocus_angle = 0.0;
     cam.focus_dist = 10.0;
 
-    try cam.render(&world);
+    try cam.render(&world, &lights);
 }
 
 pub fn draw_smoke_cornell_box() !void {
@@ -655,7 +660,7 @@ pub fn main() !void {
     //try draw_perlin_spheres();
     //try draw_quads();
     //try draw_simple_light();
-    try draw_cornell_box();
+    //try draw_cornell_box();
     //try draw_smoke_cornell_box();
-    //try draw_final_scene();
+    try draw_final_scene();
 }
