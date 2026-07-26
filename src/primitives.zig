@@ -11,6 +11,11 @@ const AABB = spatial.AABB;
 const HittableList = scene.HittableList;
 const HitRecord = scene.HitRecord;
 
+/// Sentinel written into rec.u/rec.v by primitives that defer UV computation
+/// (spheres). Material code only pays for acos/atan2 when the texture
+/// actually consumes UVs (image textures). Quads/boxes write real UVs (>= 0).
+pub const UV_DEFERRED: f32 = -1.0;
+
 pub const Primitive = union(enum) {
     Sphere: Sphere,
     Quad: Quad,
@@ -141,8 +146,13 @@ pub const Sphere = struct {
         const outward_normal: @Vector(3, f32) = (rec.p - current_center) * math.vec3s(self.inv_radius);
         rec.set_face_normal(r, &outward_normal);
 
-        // TODO:
-        get_sphere_uv(outward_normal, rec);
+        //get_sphere_uv(outward_normal, rec);
+
+        // UVs are computed lazily by the material only if the texture needs
+        // them. Skips an acos + atan2 per hit for solid/checker/noise textures
+        // and for dielectric/metal spheres entirely.
+        rec.u = UV_DEFERRED;
+        rec.v = UV_DEFERRED;
 
         rec.mat_id = self.mat_id;
 
@@ -698,6 +708,9 @@ pub const ConstantMedium = struct {
 
         rec.normal = @Vector(3, f32){ 1, 0, 0 }; // arbitrary
         rec.front_face = true; // also arbitrary
+        rec.u = UV_DEFERRED;
+        rec.v = UV_DEFERRED;
+
         rec.mat_id = self.phase_function_mat_id;
 
         return true;
