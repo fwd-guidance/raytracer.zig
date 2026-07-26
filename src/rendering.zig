@@ -106,14 +106,14 @@ pub const Camera = struct {
 
         std.debug.print("Rendering with {d} threads\n", .{self.num_threads});
 
+        var next_row = AtomicValue(u32).init(0);
         var rows_completed = AtomicValue(u32).init(0);
 
         const BufferedRenderContext = struct {
             camera: *Camera,
             world: *const hittable_list,
             lights: *const hittable_list,
-            start_row: u32,
-            end_row: u32,
+            next_row: *AtomicValue(u32),
             rows_completed: *AtomicValue(u32),
             buffer: *std.ArrayList(@Vector(3, f32)),
         };
@@ -124,18 +124,18 @@ pub const Camera = struct {
                 const world_objects = context.world;
                 const light_objects = context.lights;
                 const cam_width = camera.image_width;
+                const cam_height = camera.image_height;
 
-                var j: u32 = context.start_row;
-                while (j < context.end_row) : (j += 1) {
-                    // Progress reporting every 10 rows
-                    if (j % 10 == 0) {
-                        _ = context.rows_completed.fetchAdd(10, .monotonic);
-                        const rows_done = context.rows_completed.load(.monotonic);
-                        const rows_total = camera.image_height;
-                        if (rows_done <= rows_total) {
-                            std.debug.print("\rScanlines remaining: {d}    ", .{rows_total - rows_done});
-                        }
-                    }
+                // Pull one row at a time from a shared counter instead of a
+                // fixed contiguous band handed out up front. A thread that
+                // draws "easy" rows (background, simple diffuse) finishes
+                // them fast and immediately grabs the next available row,
+                // rather than sitting idle while whichever thread got the
+                // "hard" rows (glass, deep GI, dense geometry) is still the
+                // one everyone else is waiting on.
+                while (true) {
+                    const j = context.next_row.fetchAdd(1, .monotonic);
+                    if (j >= cam_height) break;
 
                     var i: u32 = 0;
                     while (i < cam_width) : (i += 1) {
@@ -150,21 +150,17 @@ pub const Camera = struct {
                             }
                         }
 
-                        //var sample: u32 = 0;
-                        //while (sample < camera.samples_per_pixel) : (sample += 1) {
-                        //    const r: Ray = get_ray(camera, i, j);
-                        //    pixel_color += ray_color(camera, r, camera.max_depth, world_objects);
-                        //}
-
                         const buffer_index = @as(usize, j) * @as(usize, cam_width) + @as(usize, i);
                         context.buffer.items[buffer_index] = math.scale(pixel_color, camera.pixel_samples_scale);
+                    }
+
+                    const done = context.rows_completed.fetchAdd(1, .monotonic) + 1;
+                    if (done % 10 == 0 or done == cam_height) {
+                        std.debug.print("\rScanlines remaining: {d}    ", .{cam_height - done});
                     }
                 }
             }
         }.worker;
-
-        // Calculate rows per thread using integer ceiling division
-        const rows_per_thread = (self.image_height + self.num_threads - 1) / self.num_threads;
 
         var threads = try std.ArrayList(Thread).initCapacity(std.heap.page_allocator, self.num_threads);
         defer threads.deinit(std.heap.page_allocator);
@@ -172,18 +168,12 @@ pub const Camera = struct {
         var contexts = try std.ArrayList(BufferedRenderContext).initCapacity(std.heap.page_allocator, self.num_threads);
         defer contexts.deinit(std.heap.page_allocator);
 
-        for (0..self.num_threads) |t| {
-            const start_row = @as(u32, @intCast(t * rows_per_thread));
-            const end_row = @min(start_row + rows_per_thread, self.image_height);
-
-            if (start_row >= end_row) continue;
-
+        for (0..self.num_threads) |_| {
             try contexts.append(std.heap.page_allocator, BufferedRenderContext{
                 .camera = self,
                 .world = world,
                 .lights = lights,
-                .start_row = start_row,
-                .end_row = end_row,
+                .next_row = &next_row,
                 .rows_completed = &rows_completed,
                 .buffer = &pixel_buffer,
             });
@@ -304,50 +294,6 @@ pub const Camera = struct {
 
         return accumulated;
     }
-
-    // Recursive ray colour with emissive material support.
-    // Returns the color contribution from both emitted light and scattered rays.
-    //fn ray_color(camera: *const Camera, r: Ray, depth: u32, world: *const hittable_list, lights: *const hittable_list) @Vector(3, f32) {
-    // If we've exceeded the ray bounce limit, no more light is gathered
-    //if (depth <= 0) return math.init(0, 0, 0);
-
-    //var rec: HitRecord = undefined;
-    //if (!world.hit(&r, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
-    //    return camera.background;
-    //}
-
-    //var srec: ScatterRecord = undefined;
-    //const mat = world.materials.items[rec.mat_id];
-
-    //// Get emitted color from the material (black for non-emissive materials)
-    //const color_from_emission = mat.emitted(&r, &rec, rec.u, rec.v, rec.p, world.textures.items);
-
-    //// Try to scatter the ray
-    //// Use the unified Material.scatter() method or handle each case
-    //const did_scatter = mat.scatter(&r, &rec, &srec, world.textures.items);
-
-    //// If the material doesn't scatter, return only the emitted color
-    //if (!did_scatter) {
-    //    return color_from_emission;
-    //}
-
-    //if (srec.skip_pdf) {
-    //    return srec.attenuation * ray_color(camera, srec.skip_pdf_ray, depth - 1, world, lights);
-    //}
-
-    //const light_pdf = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
-    //const p = pdf.MixturePDF.init(&light_pdf, &srec.pdf_value.?);
-
-    //var scattered = Ray.init(rec.p, p.generate(), r.tm);
-    //const pdf_value = p.value(scattered.direction);
-
-    //const scattering_pdf = world.materials.items[rec.mat_id].scattering_pdf(&r, &rec, &scattered);
-
-    //const color_from_scatter = (srec.attenuation * math.vec3s(scattering_pdf) * ray_color(camera, scattered, depth - 1, world, lights)) / math.vec3s(pdf_value);
-
-    //// Return combined emission and scatter
-    //return color_from_emission + color_from_scatter;
-    //}
 };
 
 pub fn linear_to_gamma(linear_component: f32) f32 {
