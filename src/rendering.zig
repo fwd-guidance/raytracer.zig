@@ -18,7 +18,7 @@ const ScatterRecord = @import("material.zig").ScatterRecord;
 
 /// Paths longer than this many bounces become eligible for Russian-roulette
 /// termination. Set very high (e.g. 1_000_000) to disable.
-const rr_start_bounces: u32 = 1_000_000;
+const rr_start_bounces: u32 = 4;
 
 pub const Camera = struct {
     samples_per_pixel: u32,
@@ -286,7 +286,7 @@ pub const Camera = struct {
             // Russian roulette: cheap out of long, dim paths. Unbiased because
             // survivors are boosted by 1/p_survive.
             if (max_depth - depth >= rr_start_bounces) {
-                const p_survive = @min(0.95, @max(throughput[0], @max(throughput[1], throughput[2])));
+                const p_survive = @min(0.95, @max(0.05, @max(throughput[0], @max(throughput[1], throughput[2]))));
                 if (random_double() >= p_survive) break;
                 throughput /= math.vec3s(p_survive);
             }

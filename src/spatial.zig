@@ -63,22 +63,43 @@ pub const AABB = struct {
         return d[0] * d[1] + d[1] * d[2] + d[2] * d[0];
     }
 
-    pub fn hit_distance(self: *const AABB, r: *const Ray, ray_t: Interval) ?f32 {
+    /// Slab test returning the entry distance, or null on miss. Takes t as two
+    /// scalars instead of an Interval: in BVH traversal the t_max shrinks as we
+    /// find hits, and threading a register through beats rebuilding an Interval
+    /// struct (and the optional unwrap) at every node.
+    pub fn hit_distance(self: *const AABB, r: *const Ray, t_min: f32, t_max: f32) ?f32 {
         const t0 = (self.min - r.origin) * r.inv_direction;
         const t1 = (self.max - r.origin) * r.inv_direction;
 
         const t_smaller = @min(t0, t1);
         const t_bigger = @max(t0, t1);
 
-        const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
-        const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
+        const t_enter = @max(t_min, @reduce(.Max, t_smaller));
+        const t_exit = @min(t_max, @reduce(.Min, t_bigger));
 
-        if (t_min <= t_max) {
-            return t_min;
+        if (t_enter <= t_exit) {
+            return t_enter;
         } else {
             return null;
         }
     }
+
+    //pub fn hit_distance(self: *const AABB, r: *const Ray, ray_t: Interval) ?f32 {
+    //    const t0 = (self.min - r.origin) * r.inv_direction;
+    //    const t1 = (self.max - r.origin) * r.inv_direction;
+
+    //    const t_smaller = @min(t0, t1);
+    //    const t_bigger = @max(t0, t1);
+
+    //    const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
+    //    const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
+
+    //    if (t_min <= t_max) {
+    //        return t_min;
+    //    } else {
+    //        return null;
+    //    }
+    //}
 };
 
 // ---------------------------------------------------------------------------
@@ -302,8 +323,10 @@ pub const BVHNode = struct {
             return self.left.hit(r, ray_t, rec);
         }
 
-        const dist_left = self.left_bbox.hit_distance(r, ray_t);
-        const dist_right = self.right_bbox.hit_distance(r, ray_t);
+        const closest = ray_t.max;
+
+        const dist_left = self.left_bbox.hit_distance(r, ray_t.min, closest);
+        const dist_right = self.right_bbox.hit_distance(r, ray_t.min, closest);
 
         // Traverse the closer child first so a hit there can prune the far child.
         if (dist_left != null and dist_right != null) {

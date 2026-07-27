@@ -274,15 +274,32 @@ pub const Sphere = struct {
     }
 
     fn random_to_sphere(radius_squared: f32, distance_squared: f32) @Vector(3, f32) {
-        const r1 = utils.random_double();
+        // Uniform-in-solid-angle cone sampling without trig: z = cos(theta)
+        // is uniform in [cos_max, 1]; the azimuth comes from the direction
+        // of a rejected disk point, so no sin/cos calls at all.
         const r2 = utils.random_double();
         const z = 1 + r2 * (@sqrt(1 - radius_squared / distance_squared) - 1);
+        const s = @sqrt(1 - z * z);
 
-        const phi = 2 * std.math.pi * r1;
-        const x = @cos(phi) * @sqrt(1 - z * z);
-        const y = @sin(phi) * @sqrt(1 - z * z);
+        while (true) {
+            const a = utils.random_double_range(-1, 1);
+            const b = utils.random_double_range(-1, 1);
+            const d2 = a * a + b * b;
+            if (d2 < 1 and d2 > 1e-8) {
+                const r = s / @sqrt(d2); // (a,b)/sqrt(d2) is uniform on the circle
+                return .{ a * r, b * r, z };
+            }
+        }
 
-        return .{ x, y, z };
+        //const r1 = utils.random_double();
+        //const r2 = utils.random_double();
+        //const z = 1 + r2 * (@sqrt(1 - radius_squared / distance_squared) - 1);
+
+        //const phi = 2 * std.math.pi * r1;
+        //const x = @cos(phi) * @sqrt(1 - z * z);
+        //const y = @sin(phi) * @sqrt(1 - z * z);
+
+        //return .{ x, y, z };
     }
 };
 
@@ -439,10 +456,16 @@ pub const Quad = struct {
         const beta = math.dot(self.v_perp, intersection) - self.v_perp_q;
         if (alpha < 0 or alpha > 1 or beta < 0 or beta > 1) return 0;
 
-        const distance_squared = t * t * math.square_magnitude(direction);
-        const cosine = @abs(math.dot(direction, self.normal)) / math.magnitude(direction);
+        const dist_sq_dir = math.square_magnitude(direction);
+        const distance_squared = t * t * dist_sq_dir;
+        const cosine = @abs(math.dot(direction, self.normal)) / @sqrt(dist_sq_dir);
 
         return distance_squared / (cosine * self.area);
+
+        //const distance_squared = t * t * math.square_magnitude(direction);
+        //const cosine = @abs(math.dot(direction, self.normal)) / math.magnitude(direction);
+
+        //return distance_squared / (cosine * self.area);
     }
 
     //pub fn pdf_value(self: *const Quad, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {

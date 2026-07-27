@@ -118,7 +118,12 @@ pub const Metal = struct {
 
     pub fn scatter(self: *const Metal, r_in: *const Ray, rec: *const HitRecord, srec: *ScatterRecord) bool {
         var reflected = math.reflect(r_in.direction, rec.normal);
-        reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
+
+        if (self.fuzz > 0) {
+            reflected += math.scale(math.random_unit_vector(), self.fuzz);
+        }
+
+        //reflected = math.unit(reflected) + (math.scale(math.random_unit_vector(), self.fuzz));
         srec.*.attenuation = self.albedo;
         srec.*.pdf_value = null;
         srec.*.skip_pdf = true;
