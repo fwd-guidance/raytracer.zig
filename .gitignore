@@ -7,3 +7,7 @@ sokol/
 renders/
 TODO.md
 *.ppm
+*.svg
+*.py
+*.data
+*.old
