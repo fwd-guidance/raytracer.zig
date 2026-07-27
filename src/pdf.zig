@@ -11,15 +11,6 @@ pub const PDF = union(enum) {
     hittable: HittablePDF,
     mixture: MixturePDF,
 
-    //pub fn init() PDF {
-    //    return switch (PDF) {
-    //        .sphere => |s| s.init(),
-    //        .cosine => |c| c.init(),
-    //        .hittable => |h| h.init(),
-    //        .mixture => |m| m.init(),
-    //    };
-    //}
-
     pub fn value(self: *const PDF, direction: @Vector(3, f32)) f32 {
         return switch (self.*) {
             .sphere => |*s| s.value(direction),

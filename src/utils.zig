@@ -68,47 +68,6 @@ pub inline fn random_double() f32 {
     return @as(f32, @floatFromInt(rng_slot.prng.next() >> 40)) * (1.0 / 16777216.0);
 }
 
-//const ThreadLocal = struct {
-//    threadlocal var prng: std.Random.Xoroshiro128 = undefined;
-//    threadlocal var seeded: bool = false;
-//};
-//
-///// Lazy one-time seed per thread.  Reads a single u64 from the OS CSPRNG;
-///// Xoroshiro128.init() expands it via SplitMix64 internally.
-//inline fn ensure_seeded() void {
-//    if (!ThreadLocal.seeded) {
-//        @branchHint(.cold);
-//        set_seed();
-//    }
-//}
-//
-//fn set_seed() void {
-//    var seed: u64 = undefined;
-//
-//    // Leaf-code entropy fetch: no Io handle is threaded through this
-//    // codebase, so spin up a throwaway single-threaded Io just to pull
-//    // one seed from the OS CSPRNG. Cheap since this only runs once per thread.
-//    var io_threaded: std.Io.Threaded = .init_single_threaded;
-//    defer io_threaded.deinit();
-//    const io = io_threaded.io();
-//
-//    io.random(std.mem.asBytes(&seed));
-//
-//    ThreadLocal.prng = std.Random.Xoroshiro128.init(seed);
-//    ThreadLocal.seeded = true;
-//}
-//
-///// Returns a uniformly distributed f32 in [0, 1).
-/////
-///// We call .next() directly on the engine — not .random().float() — to avoid
-///// the std.Random interface overhead.  The conversion mirrors what the
-///// interface does internally anyway: take the top 24 bits (f32 mantissa width)
-///// and divide by 2^24.
-//pub inline fn random_double() f32 {
-//    ensure_seeded();
-//    return @as(f32, @floatFromInt(ThreadLocal.prng.next() >> 40)) * (1.0 / 16777216.0);
-//}
-
 pub inline fn random_double_range(min: f32, max: f32) f32 {
     return min + (max - min) * random_double();
 }

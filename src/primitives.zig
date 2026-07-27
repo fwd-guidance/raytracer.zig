@@ -146,8 +146,6 @@ pub const Sphere = struct {
         const outward_normal: @Vector(3, f32) = (rec.p - current_center) * math.vec3s(self.inv_radius);
         rec.set_face_normal(r, &outward_normal);
 
-        //get_sphere_uv(outward_normal, rec);
-
         // UVs are computed lazily by the material only if the texture needs
         // them. Skips an acos + atan2 per hit for solid/checker/noise textures
         // and for dielectric/metal spheres entirely.
@@ -200,17 +198,6 @@ pub const Sphere = struct {
 
     pub fn bounding_box(self: *const Sphere) *const AABB {
         return &self.bbox;
-        //const r_vec = @Vector(3, f32){ self.radius, self.radius, self.radius };
-
-        //if (self.moving) {
-        //    // For moving spheres, create bounding box that encompasses both positions
-        //    const box1 = AABB.init_from_points(self.center.origin - r_vec, self.center.origin + r_vec);
-        //    const box2 = AABB.init_from_points(self.center.position(1.0) - r_vec, self.center.position(1.0) + r_vec);
-        //    return AABB.merge(box1, box2);
-        //} else {
-        //    // For static spheres
-        //    return AABB.init_from_points(self.center.origin - r_vec, self.center.origin + r_vec);
-        //}
     }
 
     pub fn translate(self: *Sphere, offset: @Vector(3, f32)) void {
@@ -242,7 +229,6 @@ pub const Sphere = struct {
         }
 
         // Recompute bounding box
-        //self.bbox = self.bounding_box();
         const radius_vec = math.vec3s(self.radius);
         const box1 = AABB.init_from_points(self.center.position(0) - radius_vec, self.center.position(0) + radius_vec);
         if (self.moving) {
@@ -256,9 +242,6 @@ pub const Sphere = struct {
     pub fn pdf_value(self: *const Sphere, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
         // Lean intersection test only; skip building a full HitRecord.
         if (!self.intersects(origin, direction, 0.001, std.math.inf(f32))) return 0;
-
-        //var rec: HitRecord = undefined;
-        //if (!self.hit(&Ray.init(origin, direction, null), Interval.init(0.001, std.math.inf(f32)), &rec)) return 0;
 
         const dist_squared = math.square_magnitude(self.center.position(0) - origin);
         const cos_theta_max = @sqrt(1 - self.radius_squared / dist_squared);
@@ -290,16 +273,6 @@ pub const Sphere = struct {
                 return .{ a * r, b * r, z };
             }
         }
-
-        //const r1 = utils.random_double();
-        //const r2 = utils.random_double();
-        //const z = 1 + r2 * (@sqrt(1 - radius_squared / distance_squared) - 1);
-
-        //const phi = 2 * std.math.pi * r1;
-        //const x = @cos(phi) * @sqrt(1 - z * z);
-        //const y = @sin(phi) * @sqrt(1 - z * z);
-
-        //return .{ x, y, z };
     }
 };
 
@@ -461,24 +434,7 @@ pub const Quad = struct {
         const cosine = @abs(math.dot(direction, self.normal)) / @sqrt(dist_sq_dir);
 
         return distance_squared / (cosine * self.area);
-
-        //const distance_squared = t * t * math.square_magnitude(direction);
-        //const cosine = @abs(math.dot(direction, self.normal)) / math.magnitude(direction);
-
-        //return distance_squared / (cosine * self.area);
     }
-
-    //pub fn pdf_value(self: *const Quad, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
-    //    var rec: HitRecord = undefined;
-    //    if (!self.hit(&Ray.init(origin, direction, null), Interval.init(0.001, std.math.inf(f32)), &rec)) {
-    //        return 0;
-    //    }
-
-    //    const distance_squared = rec.t * rec.t * math.square_magnitude(direction);
-    //    const cosine = @abs(math.dot(direction, rec.normal) / math.magnitude(direction));
-
-    //    return distance_squared / (cosine * self.area);
-    //}
 
     pub fn random(self: *const Quad, origin: @Vector(3, f32)) @Vector(3, f32) {
         const p = self.Q + (math.scale(self.u, utils.random_double())) + (math.scale(self.v, utils.random_double()));

@@ -83,23 +83,6 @@ pub const AABB = struct {
             return null;
         }
     }
-
-    //pub fn hit_distance(self: *const AABB, r: *const Ray, ray_t: Interval) ?f32 {
-    //    const t0 = (self.min - r.origin) * r.inv_direction;
-    //    const t1 = (self.max - r.origin) * r.inv_direction;
-
-    //    const t_smaller = @min(t0, t1);
-    //    const t_bigger = @max(t0, t1);
-
-    //    const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
-    //    const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
-
-    //    if (t_min <= t_max) {
-    //        return t_min;
-    //    } else {
-    //        return null;
-    //    }
-    //}
 };
 
 // ---------------------------------------------------------------------------

@@ -259,24 +259,5 @@ pub const HittableList = struct {
             return self.boxes.items[index - after_quads].random(origin);
         }
         return self.constant_mediums.items[index - after_quads - self.boxes.items.len].random(origin);
-
-        //const total = self.spheres.items.len +
-        //    self.quads.items.len +
-        //    self.boxes.items.len +
-        //    self.constant_mediums.items.len;
-        //const index: usize = @intCast(utils.random_int(0, math.tof32(total) - 1));
-
-        //if (index < self.spheres.items.len) {
-        //    return self.spheres.items[index].random(origin);
-        //}
-        //const after_spheres = self.spheres.items.len;
-        //if (index < after_spheres + self.quads.items.len) {
-        //    return self.quads.items[index - after_spheres].random(origin);
-        //}
-        //const after_quads = after_spheres + self.quads.items.len;
-        //if (index < after_quads + self.boxes.items.len) {
-        //    return self.boxes.items[index - after_quads].random(origin);
-        //}
-        //return self.constant_mediums.items[index - after_quads - self.boxes.items.len].random(origin);
     }
 };
