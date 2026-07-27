@@ -159,7 +159,7 @@ pub const Interval = struct {
     min: f32,
     max: f32,
 
-    pub fn init(min: f32, max: f32) Interval {
+    pub inline fn init(min: f32, max: f32) Interval {
         return .{
             .min = min,
             .max = max,
@@ -180,23 +180,23 @@ pub const Interval = struct {
         };
     }
 
-    pub fn add(self: Interval, displacement: f32) Interval {
+    pub inline fn add(self: Interval, displacement: f32) Interval {
         return .{ .min = self.min + displacement, .max = self.max + displacement };
     }
 
-    pub fn size(self: Interval) f32 {
+    pub inline fn size(self: Interval) f32 {
         return self.max - self.min;
     }
 
-    pub fn contains(self: Interval, x: f32) bool {
+    pub inline fn contains(self: Interval, x: f32) bool {
         return self.min <= x and x <= self.max;
     }
 
-    pub fn surrounds(self: Interval, x: f32) bool {
+    pub inline fn surrounds(self: Interval, x: f32) bool {
         return self.min < x and x < self.max;
     }
 
-    pub fn clamp(self: Interval, x: f32) f32 {
+    pub inline fn clamp(self: Interval, x: f32) f32 {
         if (x < self.min) return self.min;
         if (x > self.max) return self.max;
         return x;
@@ -246,7 +246,7 @@ pub const Ray = struct {
         return vec3s(1.0) / direction;
     }
 
-    pub fn position(self: *const Ray, t: f32) @Vector(3, f32) {
+    pub inline fn position(self: *const Ray, t: f32) @Vector(3, f32) {
         return self.origin + self.direction * vec3s(t);
     }
 };

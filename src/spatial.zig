@@ -299,31 +299,30 @@ pub const BVHNode = struct {
         allocator.destroy(self);
     }
 
-    pub fn bhv_hit(self: *const BVHNode, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn bvh_hit(self: *const BVHNode, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         // True leaf (single primitive): left and right are the same pointer.
-        // Test it once instead of twice.
         if (self.left == self.right) {
             return self.left.hittable_hit(r, ray_t, rec);
         }
 
-        const closest = ray_t.max;
+        const dist_left = self.left_bbox.hit_distance(r, ray_t.min, ray_t.max);
+        const dist_right = self.right_bbox.hit_distance(r, ray_t.min, ray_t.max);
 
-        const dist_left = self.left_bbox.hit_distance(r, ray_t.min, closest);
-        const dist_right = self.right_bbox.hit_distance(r, ray_t.min, closest);
-
-        // Traverse the closer child first so a hit there can prune the far child.
         if (dist_left != null and dist_right != null) {
             if (dist_left.? < dist_right.?) {
                 const hit_l = self.left.hittable_hit(r, ray_t, rec);
+                // Entry-distance prune: if the near hit lands at or before the
+                // far box's entry point, no primitive inside the far box can
+                // beat it. Skip the far descent entirely (PBRT's prune).
+                if (hit_l and rec.t <= dist_right.?) return true;
                 const t_max = if (hit_l) rec.t else ray_t.max;
-                const right_interval = Interval.init(ray_t.min, t_max);
-                const hit_r = self.right.hittable_hit(r, right_interval, rec);
+                const hit_r = self.right.hittable_hit(r, Interval.init(ray_t.min, t_max), rec);
                 return hit_l or hit_r;
             } else {
                 const hit_r = self.right.hittable_hit(r, ray_t, rec);
+                if (hit_r and rec.t <= dist_left.?) return true;
                 const t_max = if (hit_r) rec.t else ray_t.max;
-                const left_interval = Interval.init(ray_t.min, t_max);
-                const hit_l = self.left.hittable_hit(r, left_interval, rec);
+                const hit_l = self.left.hittable_hit(r, Interval.init(ray_t.min, t_max), rec);
                 return hit_r or hit_l;
             }
         } else if (dist_left != null) {
@@ -334,6 +333,42 @@ pub const BVHNode = struct {
             return false;
         }
     }
+
+    //pub fn bhv_hit(self: *const BVHNode, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    //    // True leaf (single primitive): left and right are the same pointer.
+    //    // Test it once instead of twice.
+    //    if (self.left == self.right) {
+    //        return self.left.hittable_hit(r, ray_t, rec);
+    //    }
+
+    //    const closest = ray_t.max;
+
+    //    const dist_left = self.left_bbox.hit_distance(r, ray_t.min, closest);
+    //    const dist_right = self.right_bbox.hit_distance(r, ray_t.min, closest);
+
+    //    // Traverse the closer child first so a hit there can prune the far child.
+    //    if (dist_left != null and dist_right != null) {
+    //        if (dist_left.? < dist_right.?) {
+    //            const hit_l = self.left.hittable_hit(r, ray_t, rec);
+    //            const t_max = if (hit_l) rec.t else ray_t.max;
+    //            const right_interval = Interval.init(ray_t.min, t_max);
+    //            const hit_r = self.right.hittable_hit(r, right_interval, rec);
+    //            return hit_l or hit_r;
+    //        } else {
+    //            const hit_r = self.right.hittable_hit(r, ray_t, rec);
+    //            const t_max = if (hit_r) rec.t else ray_t.max;
+    //            const left_interval = Interval.init(ray_t.min, t_max);
+    //            const hit_l = self.left.hittable_hit(r, left_interval, rec);
+    //            return hit_r or hit_l;
+    //        }
+    //    } else if (dist_left != null) {
+    //        return self.left.hittable_hit(r, ray_t, rec);
+    //    } else if (dist_right != null) {
+    //        return self.right.hittable_hit(r, ray_t, rec);
+    //    } else {
+    //        return false;
+    //    }
+    //}
 
     pub fn bounding_box(self: *const BVHNode) *const AABB {
         return &self.bbox;
@@ -388,7 +423,7 @@ pub const Hittable = union(HittableType) {
     pub fn hittable_hit(self: *const Hittable, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         return switch (self.*) {
             .primitive => |*p| p.prim_hit(r, ray_t, rec),
-            .bvh_node => |b| b.bhv_hit(r, ray_t, rec),
+            .bvh_node => |b| b.bvh_hit(r, ray_t, rec),
         };
     }
 

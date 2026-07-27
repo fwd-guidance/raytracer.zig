@@ -107,6 +107,7 @@ pub const Perlin = struct {
     }
 
     pub fn noise(self: *const Perlin, p: @Vector(3, f32)) f32 {
+        @setFloatMode(.optimized);
         // Calculate floor and fractional parts in one go
         const floored = @floor(p);
         const frac = p - floored;
@@ -156,6 +157,7 @@ pub const Perlin = struct {
     }
 
     pub fn turb(self: *const Perlin, p: @Vector(3, f32), depth: u32) f32 {
+        @setFloatMode(.optimized);
         var accum: f32 = 0.0;
         var temp_p = p;
         var weight: f32 = 1.0;

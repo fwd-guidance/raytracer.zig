@@ -128,7 +128,7 @@ pub const Sphere = struct {
     }
 
     pub fn sphere_hit(self: *const Sphere, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        const current_center = self.center.position(r.tm);
+        const current_center = if (self.moving) self.center.position(r.tm) else self.center.origin;
 
         const oc = current_center - r.origin;
         const a: f32 = r.a;
@@ -172,7 +172,7 @@ pub const Sphere = struct {
     /// sphere hits (rec1/rec2) here; this is the same quadratic minus all the
     /// record writes.
     pub fn sphere_hit_interval(self: *const Sphere, r: *const Ray) ?[2]f32 {
-        const current_center = self.center.position(r.tm);
+        const current_center = if (self.moving) self.center.position(r.tm) else self.center.origin;
         const oc = current_center - r.origin;
         const h: f32 = math.dot(r.direction, oc);
         const c: f32 = math.square_magnitude(oc) - self.radius_squared;
@@ -203,7 +203,8 @@ pub const Sphere = struct {
     /// no face-normal bookkeeping.
     inline fn intersects(self: *const Sphere, origin: @Vector(3, f32), direction: @Vector(3, f32), t_min: f32, t_max: f32) bool {
         @setFloatMode(.optimized);
-        const current_center = self.center.position(0);
+        //const current_center = self.center.position(0);
+        const current_center = self.center.origin;
         const oc = current_center - origin;
         const a: f32 = math.square_magnitude(direction);
         const h: f32 = math.dot(direction, oc);
@@ -270,14 +271,16 @@ pub const Sphere = struct {
         // Lean intersection test only; skip building a full HitRecord.
         if (!self.intersects(origin, direction, 0.001, std.math.inf(f32))) return 0;
 
-        const dist_squared = math.square_magnitude(self.center.position(0) - origin);
+        //const dist_squared = math.square_magnitude(self.center.position(0) - origin);
+        const dist_squared = math.square_magnitude(self.center.origin - origin);
         const cos_theta_max = @sqrt(1 - self.radius_squared / dist_squared);
         const solid_angle = 2 * std.math.pi * (1 - cos_theta_max);
         return 1.0 / solid_angle;
     }
 
     pub fn sphere_random(self: Sphere, origin: @Vector(3, f32)) @Vector(3, f32) {
-        const direction = self.center.position(0) - origin;
+        //const direction = self.center.position(0) - origin;
+        const direction = self.center.origin - origin;
         const distance_squared = math.square_magnitude(direction);
         const onb = math.OrthonormalBasis.init(direction);
         return onb.transform(random_to_sphere(self.radius_squared, distance_squared));
@@ -497,32 +500,34 @@ pub const Box = struct {
     }
 
     pub fn box_hit(self: *const Box, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        // 1. Translate Ray to Box Local Space
-        // (Treat the box center as 0,0,0)
-        const origin_diff = r.origin - self.center;
+        // Axis-aligned fast path (sin_theta == 0 means never rotated): skip
+        // the rotation FMAs and reuse the ray's cached inverse direction
+        // instead of paying a 3-wide division per box test. The 400-box
+        // ground grid hits this path exclusively.
+        const axis_aligned = self.sin_theta == 0.0;
 
-        // 2. Rotate Ray into Box Alignment (Inverse Rotation)
-        // Rotating the ray by -angle is faster than rotating the box geometry.
-        // x' = x cos(θ) - z sin(θ)   (standard rotation)
-        // x' = x cos(-θ) - z sin(-θ) = x cos(θ) + z sin(θ) (inverse)
-        const local_origin = @Vector(3, f32){
-            self.cos_theta * origin_diff[0] - self.sin_theta * origin_diff[2],
-            origin_diff[1],
-            self.sin_theta * origin_diff[0] + self.cos_theta * origin_diff[2],
-        };
+        var local_origin: @Vector(3, f32) = undefined;
+        var local_dir: @Vector(3, f32) = undefined;
+        var inv_d: @Vector(3, f32) = undefined;
 
-        const local_dir = @Vector(3, f32){
-            self.cos_theta * r.direction[0] - self.sin_theta * r.direction[2],
-            r.direction[1],
-            self.sin_theta * r.direction[0] + self.cos_theta * r.direction[2],
-        };
-
-        // 3. Slab Method Intersection (AABB Logic)
-        // We intersect the ray against the box defined by [-half_size, +half_size]
-
-        // Precompute inverse direction for speed (handle div by zero safely or use big number)
-        // Note: Zig's vectors handle 1.0/0.0 as Inf, which works with @min/@max logic usually.
-        const inv_d = math.vec3s(1.0) / local_dir;
+        if (axis_aligned) {
+            local_origin = r.origin - self.center;
+            local_dir = r.direction;
+            inv_d = r.inv_direction;
+        } else {
+            const origin_diff = r.origin - self.center;
+            local_origin = @Vector(3, f32){
+                self.cos_theta * origin_diff[0] - self.sin_theta * origin_diff[2],
+                origin_diff[1],
+                self.sin_theta * origin_diff[0] + self.cos_theta * origin_diff[2],
+            };
+            local_dir = @Vector(3, f32){
+                self.cos_theta * r.direction[0] - self.sin_theta * r.direction[2],
+                r.direction[1],
+                self.sin_theta * r.direction[0] + self.cos_theta * r.direction[2],
+            };
+            inv_d = math.vec3s(1.0) / local_dir;
+        }
 
         const t0 = (-self.half_size - local_origin) * inv_d;
         const t1 = (self.half_size - local_origin) * inv_d;
@@ -530,25 +535,16 @@ pub const Box = struct {
         const t_smaller = @min(t0, t1);
         const t_bigger = @max(t0, t1);
 
-        // Find the largest entry time and smallest exit time
         const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
         const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
 
         if (t_min >= t_max) return false;
 
-        // 4. Hit Calculation
         rec.t = t_min;
-        rec.p = r.position(t_min);
+        rec.p = r.position(t_min); // world ray: rotation preserves t
         rec.mat_id = self.mat_id;
 
-        // 5. Normal Calculation (Local Space)
-        // We figure out which face we hit by seeing which component of t_min matched.
-        // A robust way is to check the impact point relative to the box edges.
-        // However, since we computed t0/t1 per axis, we know exactly which axis was the entry.
-
         var local_normal = @Vector(3, f32){ 0, 0, 0 };
-        // Determine which axis was the "entry" axis (the Max of the t_smaller values)
-        // Note: This creates a tiny branch, but it's predictable.
         if (t_smaller[0] > t_smaller[1] and t_smaller[0] > t_smaller[2]) {
             local_normal[0] = if (local_dir[0] < 0) 1 else -1;
         } else if (t_smaller[1] > t_smaller[2]) {
@@ -557,22 +553,100 @@ pub const Box = struct {
             local_normal[2] = if (local_dir[2] < 0) 1 else -1;
         }
 
-        // 6. Rotate Normal back to World Space
-        rec.normal = @Vector(3, f32){
-            self.cos_theta * local_normal[0] + self.sin_theta * local_normal[2],
-            local_normal[1],
-            -self.sin_theta * local_normal[0] + self.cos_theta * local_normal[2],
-        };
+        if (axis_aligned) {
+            rec.normal = local_normal;
+        } else {
+            rec.normal = @Vector(3, f32){
+                self.cos_theta * local_normal[0] + self.sin_theta * local_normal[2],
+                local_normal[1],
+                -self.sin_theta * local_normal[0] + self.cos_theta * local_normal[2],
+            };
+        }
 
         rec.front_face = math.dot(r.direction, rec.normal) < 0;
-        // 7. Calculate UVs (Optional)
-        // Map the hit point on the face to 0..1
-        // const local_hit = local_origin + local_dir * @as(@Vector(3, f32), @splat(t_min));
         rec.u = 0;
         rec.v = 0;
 
         return true;
     }
+
+    //pub fn box_hit(self: *const Box, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    //    // 1. Translate Ray to Box Local Space
+    //    // (Treat the box center as 0,0,0)
+    //    const origin_diff = r.origin - self.center;
+
+    //    // 2. Rotate Ray into Box Alignment (Inverse Rotation)
+    //    // Rotating the ray by -angle is faster than rotating the box geometry.
+    //    // x' = x cos(θ) - z sin(θ)   (standard rotation)
+    //    // x' = x cos(-θ) - z sin(-θ) = x cos(θ) + z sin(θ) (inverse)
+    //    const local_origin = @Vector(3, f32){
+    //        self.cos_theta * origin_diff[0] - self.sin_theta * origin_diff[2],
+    //        origin_diff[1],
+    //        self.sin_theta * origin_diff[0] + self.cos_theta * origin_diff[2],
+    //    };
+
+    //    const local_dir = @Vector(3, f32){
+    //        self.cos_theta * r.direction[0] - self.sin_theta * r.direction[2],
+    //        r.direction[1],
+    //        self.sin_theta * r.direction[0] + self.cos_theta * r.direction[2],
+    //    };
+
+    //    // 3. Slab Method Intersection (AABB Logic)
+    //    // We intersect the ray against the box defined by [-half_size, +half_size]
+
+    //    // Precompute inverse direction for speed (handle div by zero safely or use big number)
+    //    // Note: Zig's vectors handle 1.0/0.0 as Inf, which works with @min/@max logic usually.
+    //    const inv_d = math.vec3s(1.0) / local_dir;
+
+    //    const t0 = (-self.half_size - local_origin) * inv_d;
+    //    const t1 = (self.half_size - local_origin) * inv_d;
+
+    //    const t_smaller = @min(t0, t1);
+    //    const t_bigger = @max(t0, t1);
+
+    //    // Find the largest entry time and smallest exit time
+    //    const t_min = @max(ray_t.min, @reduce(.Max, t_smaller));
+    //    const t_max = @min(ray_t.max, @reduce(.Min, t_bigger));
+
+    //    if (t_min >= t_max) return false;
+
+    //    // 4. Hit Calculation
+    //    rec.t = t_min;
+    //    rec.p = r.position(t_min);
+    //    rec.mat_id = self.mat_id;
+
+    //    // 5. Normal Calculation (Local Space)
+    //    // We figure out which face we hit by seeing which component of t_min matched.
+    //    // A robust way is to check the impact point relative to the box edges.
+    //    // However, since we computed t0/t1 per axis, we know exactly which axis was the entry.
+
+    //    var local_normal = @Vector(3, f32){ 0, 0, 0 };
+    //    // Determine which axis was the "entry" axis (the Max of the t_smaller values)
+    //    // Note: This creates a tiny branch, but it's predictable.
+    //    if (t_smaller[0] > t_smaller[1] and t_smaller[0] > t_smaller[2]) {
+    //        local_normal[0] = if (local_dir[0] < 0) 1 else -1;
+    //    } else if (t_smaller[1] > t_smaller[2]) {
+    //        local_normal[1] = if (local_dir[1] < 0) 1 else -1;
+    //    } else {
+    //        local_normal[2] = if (local_dir[2] < 0) 1 else -1;
+    //    }
+
+    //    // 6. Rotate Normal back to World Space
+    //    rec.normal = @Vector(3, f32){
+    //        self.cos_theta * local_normal[0] + self.sin_theta * local_normal[2],
+    //        local_normal[1],
+    //        -self.sin_theta * local_normal[0] + self.cos_theta * local_normal[2],
+    //    };
+
+    //    rec.front_face = math.dot(r.direction, rec.normal) < 0;
+    //    // 7. Calculate UVs (Optional)
+    //    // Map the hit point on the face to 0..1
+    //    // const local_hit = local_origin + local_dir * @as(@Vector(3, f32), @splat(t_min));
+    //    rec.u = 0;
+    //    rec.v = 0;
+
+    //    return true;
+    //}
 
     pub fn box_bounding_box(self: *const Box) *const AABB {
         return &self.bbox;
