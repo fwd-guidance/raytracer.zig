@@ -25,7 +25,7 @@ pub inline fn floorToU8(x: f32) u8 {
     return @as(u8, @truncate(@as(u32, @bitCast(@as(i32, @intFromFloat(x))))));
 }
 
-pub fn init(x: f32, y: f32, z: f32) @Vector(3, f32) {
+pub inline fn init(x: f32, y: f32, z: f32) @Vector(3, f32) {
     return .{ x, y, z };
 }
 
@@ -37,30 +37,30 @@ pub fn random_vec_range(min: f32, max: f32) @Vector(3, f32) {
     return .{ utils.random_double_range(min, max), utils.random_double_range(min, max), utils.random_double_range(min, max) };
 }
 
-pub fn add(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
+pub inline fn add(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
     return v + vec3s(scalar);
 }
 
-pub fn scale(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
+pub inline fn scale(v: @Vector(3, f32), scalar: f32) @Vector(3, f32) {
     return v * vec3s(scalar);
 }
 
-pub fn magnitude(v: @Vector(3, f32)) f32 {
+pub inline fn magnitude(v: @Vector(3, f32)) f32 {
     //return @sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
     return @sqrt(@reduce(.Add, v * v));
 }
 
-pub fn square_magnitude(v: @Vector(3, f32)) f32 {
+pub inline fn square_magnitude(v: @Vector(3, f32)) f32 {
     //return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
     return @reduce(.Add, v * v);
 }
 
-pub fn near_zero(self: @Vector(3, f32)) bool {
+pub inline fn near_zero(self: @Vector(3, f32)) bool {
     const s: @Vector(3, f32) = @splat(1e-8);
     return @reduce(.And, @abs(self) < s);
 }
 
-pub fn unit(v: @Vector(3, f32)) @Vector(3, f32) {
+pub inline fn unit(v: @Vector(3, f32)) @Vector(3, f32) {
     const inv_len = 1.0 / @sqrt(@reduce(.Add, v * v));
     return v * vec3s(inv_len);
 }
@@ -109,22 +109,22 @@ pub fn random_on_hemisphere(normal: @Vector(3, f32)) @Vector(3, f32) {
     }
 }
 
-pub fn reflect(v: @Vector(3, f32), n: @Vector(3, f32)) @Vector(3, f32) {
+pub inline fn reflect(v: @Vector(3, f32), n: @Vector(3, f32)) @Vector(3, f32) {
     return v - scale(n, dot(v, n) * 2);
 }
 
-pub fn refract(uv: @Vector(3, f32), n: @Vector(3, f32), etai_over_etat: f32) @Vector(3, f32) {
+pub inline fn refract(uv: @Vector(3, f32), n: @Vector(3, f32), etai_over_etat: f32) @Vector(3, f32) {
     const cos_theta: f32 = @min(dot(-uv, n), 1.0);
     const r_out_perp = scale(uv + scale(n, cos_theta), etai_over_etat);
     const r_out_parallel = scale(n, -@sqrt(@abs(1.0 - square_magnitude(r_out_perp))));
     return r_out_perp + r_out_parallel;
 }
 
-pub fn dot(u: @Vector(3, f32), v: @Vector(3, f32)) f32 {
+pub inline fn dot(u: @Vector(3, f32), v: @Vector(3, f32)) f32 {
     return @reduce(.Add, u * v);
 }
 
-pub fn cross(u: @Vector(3, f32), v: @Vector(3, f32)) @Vector(3, f32) {
+pub inline fn cross(u: @Vector(3, f32), v: @Vector(3, f32)) @Vector(3, f32) {
     const u_yzx = @shuffle(f32, u, undefined, @Vector(3, i32){ 1, 2, 0 });
     const u_zxy = @shuffle(f32, u, undefined, @Vector(3, i32){ 2, 0, 1 });
     const v_yzx = @shuffle(f32, v, undefined, @Vector(3, i32){ 1, 2, 0 });
@@ -223,9 +223,21 @@ pub const Ray = struct {
     direction: @Vector(3, f32),
     inv_direction: @Vector(3, f32),
     tm: f32,
+    a: f32, // |direction|^2, cached: used by every sphere intersection
+    inv_a: f32, // 1 / |direction|^2
+    len: f32, // |direction|, cached: used by ConstantMedium
 
     pub fn init(origin: @Vector(3, f32), direction: @Vector(3, f32), tm: ?f32) Ray {
-        return .{ .origin = origin, .direction = direction, .inv_direction = compute_inv_direction(direction), .tm = tm orelse 0 };
+        const a = @reduce(.Add, direction * direction);
+        return .{
+            .origin = origin,
+            .direction = direction,
+            .inv_direction = compute_inv_direction(direction),
+            .tm = tm orelse 0,
+            .a = a,
+            .inv_a = 1.0 / a,
+            .len = @sqrt(a),
+        };
     }
 
     inline fn compute_inv_direction(direction: @Vector(3, f32)) @Vector(3, f32) {

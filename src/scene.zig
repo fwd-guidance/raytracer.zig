@@ -112,22 +112,22 @@ pub const HittableList = struct {
             .Sphere => |s| {
                 try self.spheres.append(self.allocator, s);
                 const stored = &self.spheres.items[self.spheres.items.len - 1];
-                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+                self.bbox = AABB.merge(self.bbox, stored.sphere_bounding_box().*);
             },
             .Quad => |q| {
                 try self.quads.append(self.allocator, q);
                 const stored = &self.quads.items[self.quads.items.len - 1];
-                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+                self.bbox = AABB.merge(self.bbox, stored.quad_bounding_box().*);
             },
             .Box => |b| {
                 try self.boxes.append(self.allocator, b);
                 const stored = &self.boxes.items[self.boxes.items.len - 1];
-                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+                self.bbox = AABB.merge(self.bbox, stored.box_bounding_box().*);
             },
             .ConstantMedium => |cm| {
                 try self.constant_mediums.append(self.allocator, cm);
                 const stored = &self.constant_mediums.items[self.constant_mediums.items.len - 1];
-                self.bbox = AABB.merge(self.bbox, stored.bounding_box().*);
+                self.bbox = AABB.merge(self.bbox, stored.constmed_bounding_box().*);
             },
         }
         // Clear BVH since we've modified the object list
@@ -138,8 +138,8 @@ pub const HittableList = struct {
         return self;
     }
 
-    pub fn hit(self: *const HittableList, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        return self.bvh_root.?.hit(r, ray_t, rec);
+    pub fn hl_hit(self: *const HittableList, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+        return self.bvh_root.?.hittable_hit(r, ray_t, rec);
     }
 
     pub fn bounding_box(self: *HittableList) *const AABB {
@@ -202,29 +202,29 @@ pub const HittableList = struct {
         // weight = 1/count = 1, so skip the weight division and four loops
         // and dispatch directly.
         if (count == 1) {
-            if (n_spheres == 1) return self.spheres.items[0].pdf_value(origin, direction);
-            if (n_quads == 1) return self.quads.items[0].pdf_value(origin, direction);
-            if (n_boxes == 1) return self.boxes.items[0].pdf_value(origin, direction);
-            return self.constant_mediums.items[0].pdf_value(origin, direction);
+            if (n_spheres == 1) return self.spheres.items[0].sphere_pdf_value(origin, direction);
+            if (n_quads == 1) return self.quads.items[0].quad_pdf_value(origin, direction);
+            if (n_boxes == 1) return self.boxes.items[0].box_pdf_value(origin, direction);
+            return self.constant_mediums.items[0].constmed_pdf_value(origin, direction);
         }
 
         const weight = 1.0 / math.tof32(count);
         var sum: f32 = 0.0;
 
         for (self.spheres.items) |*s| {
-            sum += weight * s.pdf_value(origin, direction);
+            sum += weight * s.sphere_pdf_value(origin, direction);
         }
 
         for (self.quads.items) |*q| {
-            sum += weight * q.pdf_value(origin, direction);
+            sum += weight * q.quad_pdf_value(origin, direction);
         }
 
         for (self.boxes.items) |*b| {
-            sum += weight * b.pdf_value(origin, direction);
+            sum += weight * b.box_pdf_value(origin, direction);
         }
 
         for (self.constant_mediums.items) |*cm| {
-            sum += weight * cm.pdf_value(origin, direction);
+            sum += weight * cm.constmed_pdf_value(origin, direction);
         }
 
         return sum;
@@ -239,25 +239,25 @@ pub const HittableList = struct {
         // Fast path: a single light needs no selection draw (saves one RNG
         // call per light-sampled bounce) and no index walk.
         if (total == 1) {
-            if (self.spheres.items.len == 1) return self.spheres.items[0].random(origin);
-            if (self.quads.items.len == 1) return self.quads.items[0].random(origin);
-            if (self.boxes.items.len == 1) return self.boxes.items[0].random(origin);
-            return self.constant_mediums.items[0].random(origin);
+            if (self.spheres.items.len == 1) return self.spheres.items[0].sphere_random(origin);
+            if (self.quads.items.len == 1) return self.quads.items[0].quad_random(origin);
+            if (self.boxes.items.len == 1) return self.boxes.items[0].box_random(origin);
+            return self.constant_mediums.items[0].constmed_random(origin);
         }
 
         const index: usize = @intCast(utils.random_int(0, math.tof32(total) - 1));
 
         if (index < self.spheres.items.len) {
-            return self.spheres.items[index].random(origin);
+            return self.spheres.items[index].sphere_random(origin);
         }
         const after_spheres = self.spheres.items.len;
         if (index < after_spheres + self.quads.items.len) {
-            return self.quads.items[index - after_spheres].random(origin);
+            return self.quads.items[index - after_spheres].quad_random(origin);
         }
         const after_quads = after_spheres + self.quads.items.len;
         if (index < after_quads + self.boxes.items.len) {
-            return self.boxes.items[index - after_quads].random(origin);
+            return self.boxes.items[index - after_quads].box_random(origin);
         }
-        return self.constant_mediums.items[index - after_quads - self.boxes.items.len].random(origin);
+        return self.constant_mediums.items[index - after_quads - self.boxes.items.len].constmed_random(origin);
     }
 };

@@ -98,7 +98,7 @@ pub const Lambertian = struct {
         const texture = &textures[self.tex_id];
 
         const uv = sampleUV(texture, rec);
-        srec.attenuation = texture.value(uv[0], uv[1], rec.p);
+        srec.attenuation = texture.texture_value(uv[0], uv[1], rec.p);
         srec.pdf_value = pdf.PDF{ .cosine = pdf.CosinePDF.init(rec.normal) };
         srec.skip_pdf = false;
         return true;
@@ -184,7 +184,7 @@ pub const DiffuseLight = struct {
         if (!rec.front_face) return math.init(0, 0, 0);
         const texture = &textures[self.tex_id];
         const uv = sampleUV(texture, rec);
-        return texture.value(uv[0], uv[1], rec.p);
+        return texture.texture_value(uv[0], uv[1], rec.p);
     }
 };
 
@@ -195,7 +195,7 @@ pub const Isotropic = struct {
         _ = r_in;
         const texture = &textures[self.tex_id];
         const uv = sampleUV(texture, rec);
-        srec.attenuation = texture.value(uv[0], uv[1], rec.p);
+        srec.attenuation = texture.texture_value(uv[0], uv[1], rec.p);
         srec.pdf_value = pdf.PDF{ .sphere = pdf.SpherePDF.init() };
         srec.skip_pdf = false;
         return true;

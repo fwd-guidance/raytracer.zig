@@ -27,12 +27,12 @@ pub const Texture = union(enum) {
         return .{ .Noise = Noise.init(scale) };
     }
 
-    pub fn value(self: *const Texture, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn texture_value(self: *const Texture, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         return switch (self.*) {
-            .SolidColor => |*sc| sc.value(u, v, p),
-            .Checker => |*c| c.value(u, v, p),
-            .Image => |*i| i.value(u, v, p),
-            .Noise => |*perlin| perlin.value(u, v, p),
+            .SolidColor => |*sc| sc.solidcolor_value(u, v, p),
+            .Checker => |*c| c.checker_value(u, v, p),
+            .Image => |*i| i.image_value(u, v, p),
+            .Noise => |*perlin| perlin.noise_value(u, v, p),
         };
     }
 };
@@ -40,7 +40,7 @@ pub const Texture = union(enum) {
 pub const SolidColor = struct {
     albedo: @Vector(3, f32),
 
-    pub fn value(self: *const SolidColor, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn solidcolor_value(self: *const SolidColor, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         _ = u;
         _ = v;
         _ = p;
@@ -53,21 +53,21 @@ pub const Checker = struct {
     even: *const Texture,
     odd: *const Texture,
 
-    pub fn value(self: *const Checker, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn checker_value(self: *const Checker, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         const x: i32 = @intFromFloat(@floor(self.inv_scale * p[0]));
         const y: i32 = @intFromFloat(@floor(self.inv_scale * p[1]));
         const z: i32 = @intFromFloat(@floor(self.inv_scale * p[2]));
 
         const is_even = @mod(x + y + z, 2) == 0;
 
-        return if (is_even) self.even.value(u, v, p) else self.odd.value(u, v, p);
+        return if (is_even) self.even.texture_value(u, v, p) else self.odd.texture_value(u, v, p);
     }
 };
 
 pub const Image = struct {
     image: *const RTWImage,
 
-    pub fn value(self: *const Image, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn image_value(self: *const Image, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         _ = p;
 
         // If we have no texture data, return solid red as a debugging aid
@@ -110,7 +110,7 @@ pub const Noise = struct {
         };
     }
 
-    pub fn value(self: *const Noise, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn noise_value(self: *const Noise, u: f32, v: f32, p: @Vector(3, f32)) @Vector(3, f32) {
         _ = u;
         _ = v;
 

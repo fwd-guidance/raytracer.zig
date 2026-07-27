@@ -18,7 +18,7 @@ const ScatterRecord = @import("material.zig").ScatterRecord;
 
 /// Paths longer than this many bounces become eligible for Russian-roulette
 /// termination. Set very high (e.g. 1_000_000) to disable.
-const rr_start_bounces: u32 = 4;
+const rr_start_bounces: u32 = 5;
 
 pub const Camera = struct {
     samples_per_pixel: u32,
@@ -251,7 +251,7 @@ pub const Camera = struct {
         var srec: ScatterRecord = undefined;
 
         while (depth > 0) {
-            if (!world.hit(&ray, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
+            if (!world.hl_hit(&ray, Interval{ .min = 0.001, .max = std.math.inf(f32) }, &rec)) {
                 // Ray escaped the scene.
                 accumulated += throughput * camera.background;
                 break;
@@ -273,8 +273,8 @@ pub const Camera = struct {
                 const light_pdf = pdf.PDF{ .hittable = pdf.HittablePDF.init(lights, rec.p) };
                 const p = pdf.MixturePDF.init(&light_pdf, &srec.pdf_value.?);
 
-                const scattered = Ray.init(rec.p, p.generate(), ray.tm);
-                const pdf_value = p.value(scattered.direction);
+                const scattered = Ray.init(rec.p, p.mixturepdf_generate(), ray.tm);
+                const pdf_value = p.mixturepdf_value(scattered.direction);
 
                 const weight = mat.scattering_pdf(&ray, &rec, &scattered) / pdf_value;
                 throughput *= srec.attenuation * math.vec3s(weight);

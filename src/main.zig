@@ -660,7 +660,7 @@ pub fn main() !void {
     //try draw_perlin_spheres();
     //try draw_quads();
     //try draw_simple_light();
-    try draw_cornell_box();
+    //try draw_cornell_box();
     //try draw_smoke_cornell_box();
-    //try draw_final_scene();
+    try draw_final_scene();
 }

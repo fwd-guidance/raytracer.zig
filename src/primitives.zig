@@ -22,57 +22,67 @@ pub const Primitive = union(enum) {
     Box: Box,
     ConstantMedium: ConstantMedium,
 
-    pub fn hit(self: *const Primitive, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub inline fn prim_hit(self: *const Primitive, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         switch (self.*) {
-            .Sphere => |*s| return s.hit(r, ray_t, rec),
-            .Quad => |*q| return q.hit(r, ray_t, rec),
-            .Box => |*b| return b.hit(r, ray_t, rec),
-            .ConstantMedium => |*cm| return cm.hit(r, ray_t, rec),
+            .Sphere => |*s| return s.sphere_hit(r, ray_t, rec),
+            .Quad => |*q| return q.quad_hit(r, ray_t, rec),
+            .Box => |*b| return b.box_hit(r, ray_t, rec),
+            .ConstantMedium => |*cm| return cm.constmed_hit(r, ray_t, rec),
         }
+    }
+
+    /// Entry/exit distances for medium boundaries. Analytic for spheres;
+    /// other primitives return null and the caller falls back to two full
+    /// hit() tests.
+    pub inline fn prim_hit_interval(self: *const Primitive, r: *const Ray) ?[2]f32 {
+        return switch (self.*) {
+            .Sphere => |*s| s.sphere_hit_interval(r),
+            else => null,
+        };
     }
 
     pub fn bounding_box(self: *const Primitive) *const AABB {
         return switch (self.*) {
-            .Sphere => |*s| s.bounding_box(),
-            .Quad => |*q| q.bounding_box(),
-            .Box => |*b| b.bounding_box(),
-            .ConstantMedium => |*cm| cm.bounding_box(),
+            .Sphere => |*s| s.sphere_bounding_box(),
+            .Quad => |*q| q.quad_bounding_box(),
+            .Box => |*b| b.box_bounding_box(),
+            .ConstantMedium => |*cm| cm.constmed_bounding_box(),
         };
     }
 
     pub fn translate(self: *Primitive, offset: @Vector(3, f32)) void {
         switch (self.*) {
-            .Sphere => |*s| return s.translate(offset),
-            .Quad => |*q| return q.translate(offset),
-            .Box => |*b| return b.translate(offset),
-            .ConstantMedium => |*cm| return cm.translate(offset),
+            .Sphere => |*s| return s.sphere_translate(offset),
+            .Quad => |*q| return q.quad_translate(offset),
+            .Box => |*b| return b.box_translate(offset),
+            .ConstantMedium => |*cm| return cm.constmed_translate(offset),
         }
     }
 
     pub fn rotate_y(self: *Primitive, angle: f32) void {
         switch (self.*) {
-            .Sphere => |*s| return s.rotate_y(angle),
-            .Quad => |*q| return q.rotate_y(angle),
-            .Box => |*b| return b.rotate_y(angle),
-            .ConstantMedium => |*cm| return cm.rotate_y(angle),
+            .Sphere => |*s| return s.sphere_rotate_y(angle),
+            .Quad => |*q| return q.quad_rotate_y(angle),
+            .Box => |*b| return b.box_rotate_y(angle),
+            .ConstantMedium => |*cm| return cm.constmed_rotate_y(angle),
         }
     }
 
     pub fn pdf_value(self: *const Primitive, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
         switch (self.*) {
-            .Sphere => |*s| return s.pdf_value(origin, direction),
-            .Quad => |*q| return q.pdf_value(origin, direction),
-            .Box => |*b| return b.pdf_value(origin, direction),
-            .ConstantMedium => |*cm| return cm.pdf_value(origin, direction),
+            .Sphere => |*s| return s.sphere_pdf_value(origin, direction),
+            .Quad => |*q| return q.quad_pdf_value(origin, direction),
+            .Box => |*b| return b.box_pdf_value(origin, direction),
+            .ConstantMedium => |*cm| return cm.constmed_pdf_value(origin, direction),
         }
     }
 
     pub fn random(self: *const Primitive, origin: @Vector(3, f32)) @Vector(3, f32) {
         switch (self.*) {
-            .Sphere => |*s| return s.random(origin),
-            .Quad => |*q| return q.random(origin),
-            .Box => |*b| return b.random(origin),
-            .ConstantMedium => |*cm| return cm.random(origin),
+            .Sphere => |*s| return s.sphere_random(origin),
+            .Quad => |*q| return q.quad_random(origin),
+            .Box => |*b| return b.box_random(origin),
+            .ConstantMedium => |*cm| return cm.constmed_random(origin),
         }
     }
 };
@@ -117,11 +127,11 @@ pub const Sphere = struct {
         return bbox;
     }
 
-    pub fn hit(self: *const Sphere, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn sphere_hit(self: *const Sphere, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         const current_center = self.center.position(r.tm);
 
         const oc = current_center - r.origin;
-        const a: f32 = math.square_magnitude(r.direction);
+        const a: f32 = r.a;
         const h: f32 = math.dot(r.direction, oc);
         const c: f32 = math.square_magnitude(oc) - self.radius_squared;
 
@@ -129,12 +139,11 @@ pub const Sphere = struct {
         if (discriminant < 0) return false;
 
         const sqrt_discriminant = @sqrt(discriminant);
-        const inv_a = 1.0 / a;
 
         // Find the nearest root that lies in the acceptable range
-        var root: f32 = (h - sqrt_discriminant) * inv_a;
+        var root: f32 = (h - sqrt_discriminant) * r.inv_a;
         if (!ray_t.surrounds(root)) {
-            root = (h + sqrt_discriminant) * inv_a;
+            root = (h + sqrt_discriminant) * r.inv_a;
             if (!ray_t.surrounds(root)) {
                 return false;
             }
@@ -155,6 +164,24 @@ pub const Sphere = struct {
         rec.mat_id = self.mat_id;
 
         return true;
+    }
+
+    /// Lean entry/exit query for ConstantMedium boundaries: both intersection
+    /// distances, no HitRecord, no normals, no UV bookkeeping. The atmosphere
+    /// medium covers the whole scene, so every ray used to pay two FULL
+    /// sphere hits (rec1/rec2) here; this is the same quadratic minus all the
+    /// record writes.
+    pub fn sphere_hit_interval(self: *const Sphere, r: *const Ray) ?[2]f32 {
+        const current_center = self.center.position(r.tm);
+        const oc = current_center - r.origin;
+        const h: f32 = math.dot(r.direction, oc);
+        const c: f32 = math.square_magnitude(oc) - self.radius_squared;
+
+        const discriminant: f32 = h * h - r.a * c;
+        if (discriminant < 0) return null;
+
+        const sqrt_discriminant = @sqrt(discriminant);
+        return .{ (h - sqrt_discriminant) * r.inv_a, (h + sqrt_discriminant) * r.inv_a };
     }
 
     pub fn get_sphere_uv(p: @Vector(3, f32), rec: *HitRecord) void {
@@ -196,16 +223,16 @@ pub const Sphere = struct {
         return true;
     }
 
-    pub fn bounding_box(self: *const Sphere) *const AABB {
+    pub fn sphere_bounding_box(self: *const Sphere) *const AABB {
         return &self.bbox;
     }
 
-    pub fn translate(self: *Sphere, offset: @Vector(3, f32)) void {
+    pub fn sphere_translate(self: *Sphere, offset: @Vector(3, f32)) void {
         self.center.origin += offset;
         self.bbox = self.bbox.add(offset);
     }
 
-    pub fn rotate_y(self: *Sphere, angle: f32) void {
+    pub fn sphere_rotate_y(self: *Sphere, angle: f32) void {
         const radians = std.math.degreesToRadians(angle);
         const sin_theta = @sin(radians);
         const cos_theta = @cos(radians);
@@ -239,7 +266,7 @@ pub const Sphere = struct {
         }
     }
 
-    pub fn pdf_value(self: *const Sphere, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+    pub fn sphere_pdf_value(self: *const Sphere, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
         // Lean intersection test only; skip building a full HitRecord.
         if (!self.intersects(origin, direction, 0.001, std.math.inf(f32))) return 0;
 
@@ -249,7 +276,7 @@ pub const Sphere = struct {
         return 1.0 / solid_angle;
     }
 
-    pub fn random(self: Sphere, origin: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn sphere_random(self: Sphere, origin: @Vector(3, f32)) @Vector(3, f32) {
         const direction = self.center.position(0) - origin;
         const distance_squared = math.square_magnitude(direction);
         const onb = math.OrthonormalBasis.init(direction);
@@ -322,11 +349,11 @@ pub const Quad = struct {
         return AABB.merge(bbox_diagonal1, bbox_diagonal2);
     }
 
-    pub fn bounding_box(self: *const Quad) *const AABB {
+    pub fn quad_bounding_box(self: *const Quad) *const AABB {
         return &self.bbox;
     }
 
-    pub fn hit(self: *const Quad, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn quad_hit(self: *const Quad, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         const denom = math.dot(self.normal, r.direction);
 
         // 1. Parallel Check (unchanged)
@@ -374,13 +401,13 @@ pub const Quad = struct {
         return true;
     }
 
-    pub fn translate(self: *Quad, offset: @Vector(3, f32)) void {
+    pub fn quad_translate(self: *Quad, offset: @Vector(3, f32)) void {
         self.Q += offset;
         self.D = math.dot(self.normal, self.Q);
         self.bbox = self.bbox.add(offset);
     }
 
-    pub fn rotate_y(self: *Quad, angle: f32) void {
+    pub fn quad_rotate_y(self: *Quad, angle: f32) void {
         const radians = std.math.degreesToRadians(angle);
         const sin_theta = @sin(radians);
         const cos_theta = @cos(radians);
@@ -414,7 +441,7 @@ pub const Quad = struct {
         };
     }
 
-    pub fn pdf_value(self: *const Quad, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+    pub fn quad_pdf_value(self: *const Quad, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
 
         // Lean intersection test (no HitRecord).
         const denom = math.dot(self.normal, direction);
@@ -436,7 +463,7 @@ pub const Quad = struct {
         return distance_squared / (cosine * self.area);
     }
 
-    pub fn random(self: *const Quad, origin: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn quad_random(self: *const Quad, origin: @Vector(3, f32)) @Vector(3, f32) {
         const p = self.Q + (math.scale(self.u, utils.random_double())) + (math.scale(self.v, utils.random_double()));
         return p - origin;
     }
@@ -469,7 +496,7 @@ pub const Box = struct {
         };
     }
 
-    pub fn hit(self: *const Box, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    pub fn box_hit(self: *const Box, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
         // 1. Translate Ray to Box Local Space
         // (Treat the box center as 0,0,0)
         const origin_diff = r.origin - self.center;
@@ -547,16 +574,16 @@ pub const Box = struct {
         return true;
     }
 
-    pub fn bounding_box(self: *const Box) *const AABB {
+    pub fn box_bounding_box(self: *const Box) *const AABB {
         return &self.bbox;
     }
 
-    pub fn translate(self: *Box, offset: @Vector(3, f32)) void {
+    pub fn box_translate(self: *Box, offset: @Vector(3, f32)) void {
         self.center += offset;
         self.bbox = self.bbox.add(offset);
     }
 
-    pub fn rotate_y(self: *Box, angle: f32) void {
+    pub fn box_rotate_y(self: *Box, angle: f32) void {
         const radians = std.math.degreesToRadians(angle);
         const sin_t = @sin(radians);
         const cos_t = @cos(radians);
@@ -607,14 +634,14 @@ pub const Box = struct {
         self.bbox = AABB.init_from_points(min, max);
     }
 
-    pub fn pdf_value(self: *const Box, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+    pub fn box_pdf_value(self: *const Box, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
         _ = self;
         _ = origin;
         _ = direction;
         return 0.0;
     }
 
-    pub fn random(self: *const Box, origin: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn box_random(self: *const Box, origin: @Vector(3, f32)) @Vector(3, f32) {
         _ = self;
         _ = origin;
 
@@ -648,73 +675,111 @@ pub const ConstantMedium = struct {
         self.allocator.destroy(self.boundary);
     }
 
-    pub fn hit(self: *const ConstantMedium, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
-        var rec1: HitRecord = undefined;
-        var rec2: HitRecord = undefined;
+    pub fn constmed_hit(self: *const ConstantMedium, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+        var t_enter: f32 = undefined;
+        var t_exit: f32 = undefined;
 
-        // Check if ray hits boundary at all
-        if (!self.boundary.hit(r, Interval.universe(), &rec1)) {
-            return false;
+        if (self.boundary.prim_hit_interval(r)) |span| {
+            t_enter = span[0];
+            t_exit = span[1];
+        } else {
+            // Non-sphere boundary: legacy paired intersection tests.
+            var rec1: HitRecord = undefined;
+            var rec2: HitRecord = undefined;
+            if (!self.boundary.prim_hit(r, Interval.universe(), &rec1)) return false;
+            if (!self.boundary.prim_hit(r, Interval.init(rec1.t + 0.0001, std.math.inf(f32)), &rec2)) return false;
+            t_enter = rec1.t;
+            t_exit = rec2.t;
         }
 
-        // Check if ray hits boundary again (exit point)
-        if (!self.boundary.hit(r, Interval.init(rec1.t + 0.0001, std.math.inf(f32)), &rec2)) {
-            return false;
-        }
+        if (t_enter < ray_t.min) t_enter = ray_t.min;
+        if (t_exit > ray_t.max) t_exit = ray_t.max;
+        if (t_enter >= t_exit) return false;
+        if (t_enter < 0) t_enter = 0;
 
-        // Clamp to valid ray interval
-        if (rec1.t < ray_t.min) rec1.t = ray_t.min;
-        if (rec2.t > ray_t.max) rec2.t = ray_t.max;
-
-        if (rec1.t >= rec2.t) {
-            return false;
-        }
-
-        if (rec1.t < 0) {
-            rec1.t = 0;
-        }
-
-        const ray_length = math.magnitude(r.direction);
-        const distance_inside_boundary = (rec2.t - rec1.t) * ray_length;
+        const ray_length = r.len;
+        const distance_inside_boundary = (t_exit - t_enter) * ray_length;
         const hit_distance = self.neg_inv_density * @log(utils.random_double());
 
-        if (hit_distance > distance_inside_boundary) {
-            return false;
-        }
+        if (hit_distance > distance_inside_boundary) return false;
 
-        rec.t = rec1.t + hit_distance / ray_length;
+        rec.t = t_enter + hit_distance / ray_length;
         rec.p = r.position(rec.t);
-
-        rec.normal = @Vector(3, f32){ 1, 0, 0 }; // arbitrary
-        rec.front_face = true; // also arbitrary
+        rec.normal = @Vector(3, f32){ 1, 0, 0 };
+        rec.front_face = true;
         rec.u = UV_DEFERRED;
         rec.v = UV_DEFERRED;
-
         rec.mat_id = self.phase_function_mat_id;
-
         return true;
     }
 
-    pub fn bounding_box(self: *const ConstantMedium) *const AABB {
+    //pub fn constmed_hit(self: *const ConstantMedium, r: *const Ray, ray_t: Interval, rec: *HitRecord) bool {
+    //    var rec1: HitRecord = undefined;
+    //    var rec2: HitRecord = undefined;
+
+    //    // Check if ray hits boundary at all
+    //    if (!self.boundary.prim_hit(r, Interval.universe(), &rec1)) {
+    //        return false;
+    //    }
+
+    //    // Check if ray hits boundary again (exit point)
+    //    if (!self.boundary.prim_hit(r, Interval.init(rec1.t + 0.0001, std.math.inf(f32)), &rec2)) {
+    //        return false;
+    //    }
+
+    //    // Clamp to valid ray interval
+    //    if (rec1.t < ray_t.min) rec1.t = ray_t.min;
+    //    if (rec2.t > ray_t.max) rec2.t = ray_t.max;
+
+    //    if (rec1.t >= rec2.t) {
+    //        return false;
+    //    }
+
+    //    if (rec1.t < 0) {
+    //        rec1.t = 0;
+    //    }
+
+    //    const ray_length = math.magnitude(r.direction);
+    //    const distance_inside_boundary = (rec2.t - rec1.t) * ray_length;
+    //    const hit_distance = self.neg_inv_density * @log(utils.random_double());
+
+    //    if (hit_distance > distance_inside_boundary) {
+    //        return false;
+    //    }
+
+    //    rec.t = rec1.t + hit_distance / ray_length;
+    //    rec.p = r.position(rec.t);
+
+    //    rec.normal = @Vector(3, f32){ 1, 0, 0 }; // arbitrary
+    //    rec.front_face = true; // also arbitrary
+    //    rec.u = UV_DEFERRED;
+    //    rec.v = UV_DEFERRED;
+
+    //    rec.mat_id = self.phase_function_mat_id;
+
+    //    return true;
+    //}
+
+    pub fn constmed_bounding_box(self: *const ConstantMedium) *const AABB {
         return self.boundary.bounding_box();
     }
 
-    pub fn translate(self: *ConstantMedium, offset: @Vector(3, f32)) void {
+    pub fn constmed_translate(self: *ConstantMedium, offset: @Vector(3, f32)) void {
         self.boundary.translate(offset);
     }
 
-    pub fn rotate_y(self: *ConstantMedium, angle: f32) void {
+    pub fn constmed_rotate_y(self: *ConstantMedium, angle: f32) void {
         self.boundary.rotate_y(angle);
     }
 
-    pub fn pdf_value(self: *const ConstantMedium, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
+    pub fn constmed_pdf_value(self: *const ConstantMedium, origin: @Vector(3, f32), direction: @Vector(3, f32)) f32 {
         _ = self;
         _ = origin;
         _ = direction;
         return 0.0;
     }
 
-    pub fn random(self: *const ConstantMedium, origin: @Vector(3, f32)) @Vector(3, f32) {
+    pub fn constmed_random(self: *const ConstantMedium, origin: @Vector(3, f32)) @Vector(3, f32) {
         _ = self;
         _ = origin;
 
