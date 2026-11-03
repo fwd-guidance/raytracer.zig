@@ -653,7 +653,49 @@ pub fn draw_ppm() !void {
     try cam.render(&world);
 }
 
+const mlx = @import("mlx");
+
+pub fn print_array(msg: []const u8, arr: mlx.array) !void {
+    var str = mlx.string_new();
+    defer _ = mlx.string_free(str);
+    if (mlx.array_tostring(&str, arr) != 0) return error.MlxArrayToStringFailed;
+    std.debug.print("{s}\n{s}\n", .{ msg, mlx.string_data(str) });
+}
+
 pub fn main() !void {
+    var version: mlx.string = mlx.string_new();
+    defer _ = mlx.string_free(version);
+    if (mlx.version(&version) != 0) return error.MlxVersionFailed;
+    std.debug.print("MLX version: {s}\n", .{mlx.string_data(version)});
+
+    var gpu_count: c_int = 0;
+    if (mlx.device_count(&gpu_count, mlx.GPU) != 0) return error.MlxDeviceQueryFailed;
+    const use_gpu = gpu_count > 0;
+    if (!use_gpu) {
+        var cpu_count: c_int = 0;
+        if (mlx.device_count(&cpu_count, mlx.CPU) != 0) return error.MlxDeviceQueryFailed;
+        if (cpu_count == 0) return error.NoMlxDeviceAvailable;
+    }
+    const stream = if (use_gpu) mlx.default_gpu_stream_new() else mlx.default_cpu_stream_new();
+    defer _ = mlx.stream_free(stream);
+    std.debug.print("MLX device: {s}\n", .{if (use_gpu) "GPU" else "CPU"});
+
+    const data = [_]f32{ 1, -2, 0, 4, -6, 6 };
+    const shape = [_]c_int{ 2, 3 };
+
+    const arr = mlx.array_new_data(&data, &shape, shape.len, mlx.FLOAT32);
+    defer _ = mlx.array_free(arr);
+    var res = mlx.array_new();
+    defer _ = mlx.array_free(res);
+
+    if (mlx.positive(&res, arr, stream) != 0) return error.MlxPositiveFailed;
+    try print_array("positive", res);
+
+    // Positive is an identity operation; negative schedules computation.
+    if (mlx.negative(&res, arr, stream) != 0) return error.MlxNegativeFailed;
+    if (mlx.array_eval(res) != 0) return error.MlxEvalFailed;
+
+    try print_array("negative", res);
     //try draw_ppm();
     //try draw_checkered_spheres();
     //try draw_earth();
@@ -662,5 +704,5 @@ pub fn main() !void {
     //try draw_simple_light();
     //try draw_cornell_box();
     //try draw_smoke_cornell_box();
-    try draw_final_scene();
+    //try draw_final_scene();
 }
