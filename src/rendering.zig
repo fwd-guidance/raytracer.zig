@@ -281,6 +281,10 @@ pub const Camera = struct {
                 ray = scattered;
             }
 
+            // Exactly zero weight cannot contribute any more light. In particular,
+            // light samples below a diffuse hemisphere need no further bounces.
+            if (@reduce(.And, throughput == math.vec3s(0))) break;
+
             depth -= 1;
 
             // Russian roulette: cheap out of long, dim paths. Unbiased because
